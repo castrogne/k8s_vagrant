@@ -1,0 +1,32 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whoami
+  namespace: whoami
+  annotations:
+    #cert-manager.io/cluster-issuer: letsencrypt-http01 # 1. add an annotation indicating the issuer cert-manager to use.
+    # cert-manager.io/cluster-issuer: letsencrypt-staging-http01 # 0. add an annotation indicating the issuer cert-manager to use.
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: localdev.me
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: whoami
+                port:
+                  number: 80
+    - host: localkube.me
+      http:
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: whoami
+                port:
+                  number: 80

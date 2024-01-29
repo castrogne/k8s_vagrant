@@ -1,0 +1,21 @@
+# ---
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: nfs-volume-demo
+# allowVolumeExpansion: true
+# mountOptions:
+# - noatime
+# - hard
+# - rsize=1048576
+# - wsize=1048576
+# - timeo=600
+# - retrans=2
+# - _netdev
+# - nofail
+# parameters:
+#   archiveOnDelete: "false"
+#   pathPattern: "demovol/subdir1"
+# provisioner: nfs
+# reclaimPolicy: Retain
+# volumeBindingMode: Immediate

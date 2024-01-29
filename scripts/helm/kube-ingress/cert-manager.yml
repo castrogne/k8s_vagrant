@@ -1,0 +1,19 @@
+---
+# Docs
+## https://cert-manager.io/docs/configuration/acme/
+## https://github.com/cert-manager/cert-manager/blob/v1.13.1/deploy/charts/cert-manager/values.yaml
+
+# Init
+## helm repo add jetstack https://charts.jetstack.io
+## helm repo update
+
+# Install CDR (Before)
+## kubectl apply -n kube-ingress -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.1/cert-manager.crds.yaml
+
+# Deploy/Upgrade
+## helm -n kube-ingress upgrade --install cert-manager jetstack/cert-manager -f helm/kube-ingress/cert-manager.yml --version 1.13.1
+
+global:
+  priorityClassName: "system-node-critical"
+replicaCount: 1
+maxConcurrentChallenges: 5

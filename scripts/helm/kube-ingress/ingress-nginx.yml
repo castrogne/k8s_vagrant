@@ -1,0 +1,113 @@
+---
+# Docs
+## https://github.com/kubernetes/ingress-nginx/blob/helm-chart-4.7.1/charts/ingress-nginx/values.yaml
+
+# Init
+## helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+## helm repo update
+## kubectl create ns kube-ingress
+## kubectl create secret -n kube-ingress tls nginx-tls-secret --key="../../ssl/wildcard.awh.nexen.net.key" --cert="../../ssl/wildcard.awh.nexen.net.crt"
+
+### Patch default "nginx-tls-secret" secret :
+## kubectl create secret -n kube-ingress tls nginx-tls-secret --key="../../ssl/wildcard.plebicom.com.key" --cert="../../ssl/wildcard.plebicom.com.pem" --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+### Add secret tls.
+## kubectl create secret -n kube-ingress tls wildcard-plebicom-com-tls-secret --key="../../ssl/wildcard.plebicom.com.key" --cert="../../ssl/wildcard.plebicom.com.pem"
+## kubectl create secret -n kube-ingress tls wildcard-ebuyclub-com-tls-secret --key="../../ssl/wildcard.ebuyclub.com.key" --cert="../../ssl/wildcard.ebuyclub.com.pem"
+
+
+
+## helm plugin install https://github.com/databus23/helm-diff
+
+# Deploy or Upgrade
+## helm diff -n kube-ingress upgrade --install kube-ingress ingress-nginx/ingress-nginx -f helm/kube-ingress/ingress-nginx.yml --version 4.7.1
+## helm -n kube-ingress upgrade --install kube-ingress ingress-nginx/ingress-nginx -f helm/kube-ingress/ingress-nginx.yml --version 4.7.1
+
+controller:
+
+  scope:
+    # enabled: true
+    # namespace: "mynamespace-ingress"
+    
+    # scope=false : only match with namespaceSelector. Format like foo=bar. Defaults to empty, means watching all namespaces.
+    namespaceSelector: "ingress=enabled"
+
+
+  # ingressClassByName: true
+  # ingressClassResource:
+  #   name: custom-name-classe
+  # ingressClass: custom-name-classe
+
+  kind: DaemonSet
+
+  service:
+    enabled: false
+  hostNetwork: true
+  containerPort:
+    http: 80
+    https: 443
+
+  # service:
+  #   type: NodePort
+  #   nodePorts:
+  #     http: 30080
+  #     https: 30443
+  #   externalTrafficPolicy: Local
+
+  #extraArgs:
+  #  default-ssl-certificate: "kube-ingress/nginx-tls-secret"
+
+  config:
+  #  use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+  #  forwarded-for-header: "CF-Connecting-IP" # "X-Forwarded-For"
+  #  proxy-real-ip-cidr: 10.0.154.0/24, 173.245.48.0/20, 103.21.244.0/22, 103.22.200.0/22, 103.31.4.0/22, 141.101.64.0/18, 108.162.192.0/18, 190.93.240.0/20, 188.114.96.0/20, 197.234.240.0/22, 198.41.128.0/17, 162.158.0.0/15, 104.16.0.0/13, 104.24.0.0/14, 172.64.0.0/13, 131.0.72.0/22
+    proxy-hide-headers: "Server, X-Powered-By"
+    server-tokens: "False"
+    use-gzip: "true"
+    gzip-level: 4
+    log-format-escape-json: "true"
+    log-format-upstream: '{"timestamp": "$time_iso8601", "requestID": "$req_id", "proxyUpstreamName":
+      "$proxy_upstream_name", "proxyAlternativeUpstreamName": "$proxy_alternative_upstream_name","upstreamStatus":
+      "$upstream_status", "upstreamAddr": "$upstream_addr","ingress_name": "$ingress_name","httpRequest":{"requestMethod":
+      "$request_method", "requestUrl": "$host$request_uri", "status": $status,"requestSize":
+      "$request_length", "responseSize": "$upstream_response_length", "userAgent": "$http_user_agent",
+      "remoteIp": "$remote_addr", "referer": "$http_referer", "latency": "$upstream_response_time",
+      "protocol":"$server_protocol", "host": "$http_host", "X_Forwarded_For": "$http_x_forwarded_for", "CF_Connecting_IP": "$http_cf_connecting_ip" }}'
+    # error-log-level: debug
+    proxy-buffer-size: "8k"
+  
+  allowSnippetAnnotations: false
+  priorityClassName: "system-node-critical"
+
+  image:
+    allowPrivilegeEscalation: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 250Mi
+    limits:
+      memory: 250Mi
+  
+  admissionWebhooks:
+    enabled: false
+    failurePolicy: Ignore
+    createSecretJob:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+    patchWebhookJob:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+
+defaultBackend:
+  enabled: false
