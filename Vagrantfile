@@ -19,7 +19,6 @@ Vagrant.configure("2") do |config|
       control_plane.vm.provision "file", source: "./.ssh/id_rsa.pub", destination: "/tmp/id_rsa.pub"
       control_plane.vm.provision "file", source: "./.ssh/id_rsa", destination: "/tmp/id_rsa"
       control_plane.vm.provision "shell", privileged: true, path: "scripts/init_k8s.sh"
-      control_plane.vm.provision "shell", privileged: true, path: "scripts/init_master.sh"
     end
   end
 

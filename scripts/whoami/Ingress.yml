@@ -5,21 +5,15 @@ metadata:
   name: whoami
   namespace: whoami
   annotations:
-    #cert-manager.io/cluster-issuer: letsencrypt-http01 # 1. add an annotation indicating the issuer cert-manager to use.
+    cert-manager.io/cluster-issuer: selfsigned-cluster-issuer
     # cert-manager.io/cluster-issuer: letsencrypt-staging-http01 # 0. add an annotation indicating the issuer cert-manager to use.
 spec:
   ingressClassName: nginx
+  tls:
+  - hosts:
+    - localkube.me
+    secretName: localkube-me-self-tls # 2. cert-manager will store the created certificate in this secret.
   rules:
-    - host: localdev.me
-      http:
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: whoami
-                port:
-                  number: 80
     - host: localkube.me
       http:
         paths:
