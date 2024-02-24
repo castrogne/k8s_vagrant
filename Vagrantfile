@@ -6,7 +6,7 @@ IMAGE= "bento/ubuntu-20.04"
 Vagrant.configure("2") do |config|
   # Provider
   config.vm.provider "virtualbox" do |v|
-    v.memory = 2048
+    v.memory = 1024
     v.cpus = 2
   end
 
@@ -21,7 +21,7 @@ Vagrant.configure("2") do |config|
       control_plane.vm.provision "shell", privileged: true, path: "scripts/init_k8s.sh"
 
       control_plane.vm.provider "virtualbox" do |pmv|
-        pmv.memory = 1500
+        pmv.memory = 1024
       end
     end
   end
@@ -37,6 +37,10 @@ Vagrant.configure("2") do |config|
       kubenodes.vm.provision "file", source: "./.ssh/id_rsa.pub", destination: "/tmp/id_rsa.pub"
       kubenodes.vm.provision "file", source: "./.ssh/id_rsa", destination: "/tmp/id_rsa"
       kubenodes.vm.provision "shell", privileged: true,  path: "scripts/init_k8s.sh"
+
+      kubenodes.vm.provider "virtualbox" do |pmv|
+        pmv.memory = 4096
+      end
     end
   end
   
