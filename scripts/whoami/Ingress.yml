@@ -2,7 +2,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: whoami
+  name: whoami-local
   namespace: whoami
   annotations:
     cert-manager.io/cluster-issuer: selfsigned-cluster-issuer
@@ -28,7 +28,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: whoami-f
+  name: whoami-famille-paquin
   namespace: whoami
   annotations:
     cert-manager.io/cluster-issuer: selfsigned-cluster-issuer
@@ -46,34 +46,6 @@ spec:
       http:
         paths:
           - path: /
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: whoami
-                port:
-                  number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: whoami-f2
-  namespace: whoami
-  annotations:
-    cert-manager.io/cluster-issuer: selfsigned-cluster-issuer
-    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
-    #nginx.ingress.kubernetes.io/whitelist-source-range: 173.245.48.0/20, 103.21.244.0/22, 103.22.200.0/22, 103.31.4.0/22, 141.101.64.0/18, 108.162.192.0/18, 190.93.240.0/20, 188.114.96.0/20, 197.234.240.0/22, 198.41.128.0/17, 162.158.0.0/15, 104.16.0.0/13, 104.24.0.0/14, 172.64.0.0/13, 131.0.72.0/22, 2400:cb00::/32, 2606:4700::/32, 2803:f800::/32, 2405:b500::/32, 2405:8100::/32, 2a06:98c0::/29, 2c0f:f248::/32
-spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - www.famille-paquin.fr
-    - famille-paquin.fr
-    secretName: famille-paquin-fr-self-tls
-  rules:
-    - host: www.famille-paquin.fr
-      http:
-        paths:
-          - path: /test
             pathType: ImplementationSpecific
             backend:
               service:
