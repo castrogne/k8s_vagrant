@@ -27,3 +27,17 @@ Bugfixes :
 https://medium.com/@mukesh.yadav_86837/how-to-fix-error-unable-to-upgrade-connection-pod-does-not-exist-fa90b7d1e44b
 https://medium.com/@kanrangsan/how-to-specify-internal-ip-for-kubernetes-worker-node-24790b2884fd
 
+Quick install all : (from scripts folder)
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add jetstack https://charts.jetstack.io
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm repo update
+k create ns kube-monitoring
+k create ns kube-ingress
+helm -n kube-ingress upgrade --install kube-ingress ingress-nginx/ingress-nginx -f helm/kube-ingress/ingress-nginx.yml --version 4.7.1
+kubectl apply -n kube-ingress -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.1/cert-manager.crds.yaml
+helm -n kube-ingress upgrade --install cert-manager jetstack/cert-manager -f helm/kube-ingress/cert-manager.yml --version 1.13.1
+helm upgrade --install --set 'args={--kubelet-insecure-tls}' --namespace kube-system metrics-server metrics-server/metrics-server
+helm -n kube-monitoring upgrade --install prometheus prometheus-community/kube-prometheus-stack -f helm/kube-monitoring/kube-prometheus-stack.yml --version 55.5.1
+

@@ -1,0 +1,52 @@
+
+# HELM CHART
+##  https://github.com/prometheus-community/helm-charts/tree/kube-prometheus-stack-54.2.2/charts/kube-prometheus-stack
+
+#helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#helm repo update
+## helm diff -n kube-monitoring upgrade --install prometheus prometheus-community/kube-prometheus-stack -f helm/kube-monitoring/kube-prometheus-stack.yml --version 55.5.1
+## helm -n kube-monitoring upgrade --install prometheus prometheus-community/kube-prometheus-stack -f helm/kube-monitoring/kube-prometheus-stack.yml --version 55.5.1
+
+# Install Operator CDR
+crds:
+  enabled: true
+
+# Install Prometheus (via operator)
+prometheus:
+  enabled: true
+ 
+  prometheusSpec:
+    replicas: 1
+    topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway # indique au scheduler de le programmer, tout en priorisant les noeuds minimisant le biais (skew).
+      labelSelector:
+        matchLabels:
+          app: whoami
+    resources:
+      requests:
+        memory: 1Gi
+      limits:
+        memory: 1Gi
+
+    # Allow operator object listen label on all namespace
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+
+    # ensure slow ephemere disk usage
+    retention: 2h
+    retentionSize: "500MiB"
+
+  # disable unused rules
+  defaultRules:
+    create: false
+
+nodeExporter:
+  enabled: false
+alertmanager:
+  enabled: false
+grafana:
+  enabled: false

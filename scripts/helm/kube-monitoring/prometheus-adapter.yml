@@ -1,0 +1,59 @@
+# https://github.com/prometheus-community/helm-charts/tree/prometheus-adapter-4.9.0/charts/prometheus-adapter
+
+#helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#helm repo update
+## helm diff -n kube-monitoring upgrade --install prometheus-adapter prometheus-community/prometheus-adapter -f helm/kube-monitoring/prometheus-adapter.yml --version 4.9.0
+## helm -n kube-monitoring upgrade --install prometheus-adapter prometheus-community/prometheus-adapter -f helm/kube-monitoring/prometheus-adapter.yml --version 4.9.0
+
+prometheus:
+  url: http://prometheus-kube-prometheus-prometheus.kube-monitoring.svc.cluster.local
+  port: 9090
+
+rules:
+  default: false
+  custom:
+    # This metric takes all the requests in 1-minute period for each NGINX Pod deployed.
+    # See https://github.com/nginxinc../../../../docs/resources/plebicom-ple.drawio/nginx-prometheus-exporter?tab=readme-ov-file#stub-status-metrics
+    - seriesQuery: '{__name__=~"^nginx_http_requests_total.*",namespace!=""}'
+      metricsQuery: round(sum(rate(<<.Series>>{<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>), 0.001)
+      resources:
+        template: <<.Resource>>
+      name:
+        # matches: ""
+        as: "nginx_http_requests_total"
+
+    # See https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/monitoring.md#exposed-metrics
+    # This metric takes all the requests in 1-minute period for each Ingress deployed.
+    - metricsQuery: round(sum(rate(<<.Series>>{<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>), 0.001)
+      seriesQuery: '{__name__=~"^nginx_ingress_controller_requests.*",namespace!=""}'
+      resources:
+        template: <<.Resource>>
+        overrides:
+          exported_service:
+            resource: "service"
+          exported_namespace:
+            resource: "namespace"
+      name:
+        matches: ""
+        as: "nginx_ingress_controller_requests"
+
+
+## Show Ingress named "whoami" in namespace "whoami"
+# kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/ingress/whoami/nginx_ingress_controller_requests" | jq
+
+## Show Ingress all Services in namespace "whoami"
+# kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/services/*/nginx_ingress_controller_requests" | jq
+
+## Show Ingress Service "whoami" in namespace "whoami"
+# kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/services/whoami/nginx_ingress_controller_requests" | jq
+
+## Show Ingress Service "varnish" in namespace "whoami"
+# kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/services/varnish/nginx_ingress_controller_requests" | jq
+
+## Show pod with labelSelector=app=nginx in namespace "whoami"
+# kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/pod/*/nginx_http_requests_total?labelSelector=app=nginx" | jq
+
+## Show kubernetes native Pods metrics available in namespace "whoami"
+# kubectl get --raw "/apis/metrics.k8s.io/v1beta1/namespaces/whoami/pods" |jq
+
+## Note: expressed in milli-requests-rate

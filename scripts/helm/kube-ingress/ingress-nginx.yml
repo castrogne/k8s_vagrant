@@ -15,7 +15,8 @@
 ## kubectl create secret -n kube-ingress tls wildcard-plebicom-com-tls-secret --key="../../ssl/wildcard.plebicom.com.key" --cert="../../ssl/wildcard.plebicom.com.pem"
 ## kubectl create secret -n kube-ingress tls wildcard-ebuyclub-com-tls-secret --key="../../ssl/wildcard.ebuyclub.com.key" --cert="../../ssl/wildcard.ebuyclub.com.pem"
 
-
+# helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+# helm upgrade --install --set 'args={--kubelet-insecure-tls}' --namespace kube-system metrics-server metrics-server/metrics-server
 
 ## helm plugin install https://github.com/databus23/helm-diff
 
