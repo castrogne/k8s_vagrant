@@ -18,15 +18,3 @@ docker build -t ghcr.io/castrogne/k8s_vagrant .
 docker tag ghcr.io/castrogne/k8s_vagrant ghcr.io/castrogne/k8s_vagrant:latest
 docker push ghcr.io/castrogne/k8s_vagrant:latest
 ```
-
-```
-{
-    "auths":
-    {
-        "ghcr.io":
-            {
-                "auth":"Y2FzdHJvZ25lOmdocF9OMWFNYWEzUlpUNm9Rb0dFYkdXZHVHaGRvWkluQzUwOGNibXc="
-            }
-    }
-}
-```
