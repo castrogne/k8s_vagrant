@@ -19,11 +19,34 @@ master:
     enabled: false
   persistence: 
     enabled: false
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 
 replica: 
   persistentVolumeClaimRetentionPolicy:
     enabled: false
   persistence: 
     enabled: false
+#  resourcesPreset: none
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 10000m
+sentinel:
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 10000m
 commonConfiguration: |-
   # Enable AOF https://redis.io/topics/persistence#append-only-file
   appendonly no
