@@ -24,3 +24,10 @@ spec:
                 name: autoscaler
                 port:
                   number: 8080
+          - path: /actuator
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: autoscaler
+                port:
+                  number: 8080

@@ -37,6 +37,19 @@ rules:
         matches: ""
         as: "nginx_ingress_controller_requests"
 
+    # see https://refactorizando.com/en/autoscaling-with-prometheus-and-spring-boot-in-kubernetes/
+    - seriesQuery: '{__name__=~"^http_server_requests_seconds_.*"}'
+      resources:
+        overrides:
+          kubernetes_namespace:
+            resource: namespace
+          kubernetes_pod_name:
+            resource: pod
+      name:
+        matches: "^http_server_requests_seconds_count(.*)"
+        as: "http_server_requests_seconds_count_sum"
+      metricsQuery: sum(<<.Series>>{<<.LabelMatchers>>,uri=~"/cars.*"}) by (<<.GroupBy>>)
+
 
 ## Show Ingress named "whoami" in namespace "whoami"
 # kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/whoami/ingress/whoami/nginx_ingress_controller_requests" | jq
@@ -57,3 +70,7 @@ rules:
 # kubectl get --raw "/apis/metrics.k8s.io/v1beta1/namespaces/whoami/pods" |jq
 
 ## Note: expressed in milli-requests-rate
+
+
+
+# k get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/autoscaler/pods/*/http_server_requests_per_second"

@@ -1,0 +1,55 @@
+
+# HELM CHART
+##  https://github.com/bitnami/charts/tree/main/bitnami/redis#bitnami-package-for-redis
+#helm repo add bitnami https://charts.bitnami.com/bitnami
+#helm repo update
+#kubectl create ns redis
+## helm -n redis install redis-sentinel bitnami/redis --values helm/redis/redis.yaml
+global:
+  redis:
+    password: password
+replica:
+  replicaCount: 2
+sentinel:
+  enabled: true
+commonLabels: 
+  app: redis
+master:
+  persistentVolumeClaimRetentionPolicy:
+    enabled: false
+  persistence: 
+    enabled: false
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 
+replica: 
+  persistentVolumeClaimRetentionPolicy:
+    enabled: false
+  persistence: 
+    enabled: false
+#  resourcesPreset: none
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 10000m
+sentinel:
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 200m
+    limits:
+      memory: 1Gi
+      #cpu: 10000m
+commonConfiguration: |-
+  # Enable AOF https://redis.io/topics/persistence#append-only-file
+  appendonly no
+  # Disable RDB persistence, AOF persistence already enabled.
+  save ""
+  databases 100
