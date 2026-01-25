@@ -1,0 +1,13 @@
+[Unit]
+Description=Kubernetes Startup Service
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/vagrant/start_k8s.sh
+User=vagrant
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

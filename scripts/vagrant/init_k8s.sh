@@ -54,3 +54,17 @@ apt-get update && apt-get install -y kubelet=$KUBE_VERSION kubeadm=$KUBE_VERSION
 # Disable auto-update
 apt-mark hold kubelet kubeadm kubectl
 
+# Enable and start services
+systemctl enable docker
+systemctl enable kubelet
+
+# Copy startup scripts
+cp /tmp/start_k8s.sh /home/vagrant/start_k8s.sh
+chmod +x /home/vagrant/start_k8s.sh
+chown vagrant:vagrant /home/vagrant/start_k8s.sh
+
+# Install systemd service
+cp /tmp/k8s-startup.service /etc/systemd/system/k8s-startup.service
+systemctl daemon-reload
+systemctl enable k8s-startup.service
+
