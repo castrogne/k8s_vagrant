@@ -1,6 +1,6 @@
 #!/bin/bash
 
-KUBE_VERSION="1.29.9-1.1"
+KUBE_VERSION="1.35"
 
 # Deploy keys to allow all nodes to connect each others as vagrant
 mv /tmp/id_rsa*  /home/vagrant/.ssh/
@@ -31,40 +31,35 @@ EOF
 sysctl --system
 
 # Install containerd and dependencies
-apt-get update && sudo apt-get install -y containerd.io apt-transport-https curl
+apt-get update && sudo apt-get install -y containerd apt-transport-https ca-certificates curl gnupg
 
 # Disable swap
-usermod -aG containerd vagrant
+# Note: group 'containerd' doesn't exist, containerd runs as root
 swapoff -a
 
-# MANUAL INSTALLATION - Download packages directly to avoid repository issues
-echo "📦 Downloading Kubernetes ${KUBE_VERSION} packages manually (bypassing repository issues)..."
+# APT INSTALLATION - Use official repository for better stability
+echo "📦 Installing Kubernetes ${KUBE_VERSION} via official repository..."
 
-# Download the exact versions
-cd /tmp
-curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubelet"
-curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubeadm"  
-curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubectl"
+# Add k8s GPG key (using official working method)
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${KUBE_VERSION}/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg # allow unprivileged APT programs to read this keyring
 
-# Install k8s manually
-chmod +x /tmp/kubelet /tmp/kubeadm /tmp/kubectl
-sudo mv /tmp/kubelet /usr/local/bin/
-sudo mv /tmp/kubeadm /usr/local/bin/
-sudo mv /tmp/kubectl /usr/local/bin/
+# Add repository list (corrected format)
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${KUBE_VERSION}/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list 
 
-# Create symlinks for compatibility
-sudo ln -sf /usr/local/bin/kubectl /usr/bin/kubectl
-sudo ln -sf /usr/local/bin/kubeadm /usr/bin/kubeadm
-sudo ln -sf /usr/local/bin/kubelet /usr/bin/kubelet
-
-echo "Kubernetes ${KUBE_VERSION} installed manually"
+# Install k8s via APT
+apt-get update && apt-get install -y kubelet kubeadm kubectl
 
 # Disable auto-update
 apt-mark hold kubelet kubeadm kubectl
 
+echo "✅ Kubernetes ${KUBE_VERSION} installed via APT"
+
 # Enable and start services
 systemctl enable containerd
 systemctl enable kubelet
+echo "✅ Services enabled"
 
 # Copy startup scripts
 cp /tmp/start_k8s.sh /home/vagrant/start_k8s.sh
