@@ -4,8 +4,17 @@
 sleep 10
 
 # Start all required services
-sudo systemctl start docker
+echo "Starting containerd and kubelet services..."
+sudo systemctl start containerd
 sudo systemctl start kubelet
+
+# Verify kubelet is running
+sleep 5
+if sudo systemctl is-active --quiet kubelet; then
+    echo "✅ Kubelet started successfully"
+else
+    echo "❌ Kubelet failed to start"
+fi
 
 # Wait for kubelet to be ready
 sleep 20

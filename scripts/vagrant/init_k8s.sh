@@ -1,6 +1,6 @@
 #!/bin/bash
 
-KUBE_VERSION="1.26.3-00"
+KUBE_VERSION="1.29.9-1.1"
 
 # Deploy keys to allow all nodes to connect each others as vagrant
 mv /tmp/id_rsa*  /home/vagrant/.ssh/
@@ -12,7 +12,7 @@ cat /home/vagrant/.ssh/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
 chmod 400 /home/vagrant/.ssh/authorized_keys
 chown vagrant: /home/vagrant/.ssh/authorized_keys
 
-# Enable modules for docker
+# Enable modules for containerd
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
 overlay
 br_netfilter
@@ -30,32 +30,40 @@ EOF
 
 sysctl --system
 
-# Install docker
-apt-get update && sudo apt-get install -y docker.io
+# Install containerd and dependencies
+apt-get update && sudo apt-get install -y containerd.io apt-transport-https curl
 
 # Disable swap
-usermod -aG docker vagrant
+usermod -aG containerd vagrant
 swapoff -a
 
-# Install dependy packages
-apt-get update && sudo apt-get install -y apt-transport-https curl
+# MANUAL INSTALLATION - Download packages directly to avoid repository issues
+echo "📦 Downloading Kubernetes ${KUBE_VERSION} packages manually (bypassing repository issues)..."
 
-# Add k8s GPG key
-curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+# Download the exact versions
+cd /tmp
+curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubelet"
+curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubeadm"  
+curl -fsSL -O "https://dl.k8s.io/release/v1.29.9/binaries/linux/amd64/kubectl"
 
-# Add repository list
-cat <<EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
-deb https://apt.kubernetes.io/ kubernetes-xenial main
-EOF
+# Install k8s manually
+chmod +x /tmp/kubelet /tmp/kubeadm /tmp/kubectl
+sudo mv /tmp/kubelet /usr/local/bin/
+sudo mv /tmp/kubeadm /usr/local/bin/
+sudo mv /tmp/kubectl /usr/local/bin/
 
-# Install k8s
-apt-get update && apt-get install -y kubelet=$KUBE_VERSION kubeadm=$KUBE_VERSION kubectl=$KUBE_VERSION
+# Create symlinks for compatibility
+sudo ln -sf /usr/local/bin/kubectl /usr/bin/kubectl
+sudo ln -sf /usr/local/bin/kubeadm /usr/bin/kubeadm
+sudo ln -sf /usr/local/bin/kubelet /usr/bin/kubelet
+
+echo "Kubernetes ${KUBE_VERSION} installed manually"
 
 # Disable auto-update
 apt-mark hold kubelet kubeadm kubectl
 
 # Enable and start services
-systemctl enable docker
+systemctl enable containerd
 systemctl enable kubelet
 
 # Copy startup scripts
@@ -67,4 +75,3 @@ chown vagrant:vagrant /home/vagrant/start_k8s.sh
 cp /tmp/k8s-startup.service /etc/systemd/system/k8s-startup.service
 systemctl daemon-reload
 systemctl enable k8s-startup.service
-

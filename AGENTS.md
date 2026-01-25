@@ -12,6 +12,29 @@ This is a Kubernetes cluster setup project using Vagrant and VirtualBox for loca
 
 ## Build and Development Commands
 
+## Recent Changes Summary
+
+### ✅ **January 2025 - Major Migration to Ubuntu 22.04 + Kubernetes 1.29**
+
+#### Problem Solved
+- **Repository Issues**: pkgs.k8s.io repositories were returning 403 Forbidden errors
+- **Version Obsolescence**: Kubernetes 1.26.3 was EOL (December 2024)
+- **Ubuntu Upgrade**: 20.04 → 22.04 LTS for better support
+
+#### Solution Implemented
+- **Manual Installation**: Switch to direct download from dl.k8s.io to bypass repository issues
+- **Container Runtime**: Ubuntu 22.04 + containerd.io (better K8s compatibility)
+- **Version Update**: Kubernetes 1.29.9 (supported until February 2026)
+- **Scripts Updated**: All provisioning scripts updated for new stack
+
+#### Files Modified
+- `Vagrantfile`: Changed IMAGE to "bento/ubuntu-22.04"
+- `scripts/vagrant/init_k8s.sh`: Complete rewrite for manual installation
+- `scripts/vagrant/start_k8s.sh`: Enhanced service management
+- Documentation: Updated README.md and HOWTO.md
+
+## Build and Development Commands
+
 ### Vagrant Commands
 ```bash
 # Start the cluster

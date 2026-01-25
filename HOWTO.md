@@ -22,9 +22,26 @@ vagrant up --provision
 
 ### 2- Configuration du kubeconfig
 ```bash
-vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubectl.d/kubeconfig.yml
-export KUBECONFIG=./kubectl.d/kubeconfig.yml
+vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yml
+
+# Configuration permanente (ajouter au .bashrc)
+export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yml
+
+# Ou temporaire pour la session
+export KUBECONFIG=$PWD/kubeconfig.yml
 ```
+
+### 3- Installation du réseau (Calico)
+```bash
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml
+```
+
+### 4- Vérification du cluster
+```bash
+kubectl get nodes -o wide
+```
+
+**Note importante** : L'installation utilise maintenant la méthode manuelle pour contourner les problèmes de dépôts pkgs.k8s.io. Les packages sont téléchargés directement depuis les releases officielles Kubernetes.
 
 ### 3- Installation du réseau (Calico)
 ```bash
