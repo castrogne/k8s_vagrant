@@ -22,13 +22,13 @@ vagrant up --provision
 
 ### 2- Configuration du kubeconfig
 ```bash
-vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yml
+vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yaml
 
 # Configuration permanente (ajouter au .bashrc)
-export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yml
+export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yaml
 
 # Ou temporaire pour la session
-export KUBECONFIG=$PWD/kubeconfig.yml
+export KUBECONFIG=$PWD/kubeconfig.yaml
 ```
 
 ### 3- Installation du réseau (Calico)

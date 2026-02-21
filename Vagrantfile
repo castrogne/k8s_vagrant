@@ -1,12 +1,12 @@
 NMB_CONTROL_PLANE = 1
-NMB_WORKER = 2
-IMAGE= "bento/ubuntu-22.04"
+NMB_WORKER = 1
+IMAGE= "bento/ubuntu-24.04"
 
 
 Vagrant.configure("2") do |config|
   # Provider
   config.vm.provider "virtualbox" do |v|
-    v.memory = 2048
+    v.memory = 3072
     v.cpus = 2
   end
 
@@ -42,6 +42,7 @@ Vagrant.configure("2") do |config|
 
       kubenodes.vm.provider "virtualbox" do |pmv|
         pmv.memory = 4096
+        pmv.cpus = 2
       end
     end
   end
