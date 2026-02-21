@@ -1,0 +1,166 @@
+control-plane1: sysctl: setting key "net.ipv4.conf.all.accept_source_route": Invalid argument
+control-plane1: sysctl: setting key "net.ipv4.conf.all.promote_secondaries": Invalid argument
+control-plane1: dpkg-preconfigure: unable to re-open stdin: No such file or directory
+control-plane1: dpkg-preconfigure: unable to re-open stdin: No such file or directory
+control-plane1: Created symlink /etc/systemd/system/multi-user.target.wants/k8s-startup.service → /etc/systemd/system/k8s-startup.service.
+
+
+control-plane1: 	[WARNING ContainerRuntimeVersion]: You must update your container runtime to a version that supports the CRI method RuntimeConfig. Falling back to using cgroupDriver from kubelet config will be removed in 1.36. For more information, see https://git.k8s.io/enhancements/keps/sig-node/4033-group-driver-detection-over-cri
+control-plane1: W0126 18:29:54.640776    3202 checks.go:906] detected that the sandbox image "registry.k8s.io/pause:3.8" of the container runtime is inconsistent with that used by kubeadm. It is recommended to use "registry.k8s.io/pause:3.10.1" as the CRI sandbox image.
+
+
+
+
+worker1: sysctl: setting key "net.ipv4.conf.all.accept_source_route": Invalid argument
+worker1: dpkg-preconfigure: unable to re-open stdin: No such file or directory
+
+worker1: Created symlink /etc/systemd/system/multi-user.target.wants/k8s-startup.service → /etc/systemd/system/k8s-startup.service.
+worker1: Warning: Permanently added '192.168.56.11' (ED25519) to the list of known hosts.
+worker1: 	[WARNING ContainerRuntimeVersion]: You must update your container runtime to a version that supports the CRI method RuntimeConfig. Falling back to using cgroupDriver from kubelet config will be removed in 1.36. For more information, see https://git.k8s.io/enhancements/keps/sig-node/4033-group-driver-detection-over-cri
+
+
+==> worker2: Running provisioner: shell...
+    worker2: Running: /tmp/vagrant-shell20260126-5407-hy2hf8.sh
+    worker2: Warning: Permanently added '192.168.56.11' (ED25519) to the list of known hosts.
+    worker2: E0126 18:39:33.256346    7222 request.go:1196] "Unexpected error when reading response body" err="net/http: request canceled (Client.Timeout or context cancellation while reading body)"
+    worker2: error: failed to create or update bootstrap token with name bootstrap-token-cgb7dt: unable to create *v1.Secret: Post "https://192.168.56.11:6443/api/v1/namespaces/kube-system/secrets?timeout=10s": net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+    worker2: To see the stack trace of this error execute with --v=5 or higher
+    worker2: usage: sudo -h | -K | -k | -V
+    worker2: usage: sudo -v [-ABknS] [-g group] [-h host] [-p prompt] [-u user]
+    worker2: usage: sudo -l [-ABknS] [-g group] [-h host] [-p prompt] [-U user] [-u user]
+    worker2:             [command]
+    worker2: usage: sudo [-ABbEHknPS] [-r role] [-t type] [-C num] [-D directory] [-g group]
+    worker2:             [-h host] [-p prompt] [-R directory] [-T timeout] [-u user]
+    worker2:             [VAR=value] [-i|-s] [<command>]
+    worker2: usage: sudo -e [-ABknS] [-r role] [-t type] [-C num] [-D directory] [-g group]
+    worker2:             [-h host] [-p prompt] [-R directory] [-T timeout] [-u user] file ...
+
+
+
+
+
+ppaquin@PORTABLE-PIERRE:~/Projets/perso/k8s_vagrant$ k get all -o wide
+E0126 22:01:15.025173   33593 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"kubernetes\")"
+E0126 22:01:15.044665   33593 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"kubernetes\")"
+E0126 22:01:15.056681   33593 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"kubernetes\")"
+E0126 22:01:15.065345   33593 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"kubernetes\")"
+E0126 22:01:15.070351   33593 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of \"crypto/rsa: verification error\" while trying to verify candidate authority certificate \"kubernetes\")"
+Unable to connect to the server: tls: failed to verify certificate: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "kubernetes")
+
+
+
+ppaquin@PORTABLE-PIERRE:~/Projets/perso/k8s_vagrant$ k get all -o wide
+E0126 22:09:51.925527   36177 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": dial tcp 192.168.56.11:6443: connect: connection refused"
+E0126 22:09:51.925942   36177 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": dial tcp 192.168.56.11:6443: connect: connection refused"
+E0126 22:09:51.927750   36177 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": dial tcp 192.168.56.11:6443: connect: connection refused"
+E0126 22:09:51.928246   36177 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": dial tcp 192.168.56.11:6443: connect: connection refused"
+E0126 22:09:51.929368   36177 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.56.11:6443/api?timeout=32s\": dial tcp 192.168.56.11:6443: connect: connection refused"
+The connection to the server 192.168.56.11:6443 was refused - did you specify the right host or port?
+
+
+
+
+
+
+ppaquin@PORTABLE-PIERRE:~/Projets/perso/k8s_vagrant$ k -n kube-system get all
+NAME                                         READY   STATUS             RESTARTS        AGE
+pod/coredns-7d764666f9-9pgtb                 0/1     Pending            0               29m
+pod/coredns-7d764666f9-rp5mj                 0/1     Pending            0               29m
+pod/etcd-control-plane1                      1/1     Running            6 (6m11s ago)   30m
+pod/kube-apiserver-control-plane1            1/1     Running            8 (7m20s ago)   30m
+pod/kube-controller-manager-control-plane1   0/1     CrashLoopBackOff   9 (53s ago)     30m
+pod/kube-proxy-4bbfr                         0/1     CrashLoopBackOff   8 (3m54s ago)   29m
+pod/kube-proxy-f89gj                         0/1     CrashLoopBackOff   7 (98s ago)     21m
+pod/kube-proxy-gtbpz                         1/1     Running            8 (5m33s ago)   25m
+pod/kube-scheduler-control-plane1            1/1     Running            9 (77s ago)     30m
+
+NAME               TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+service/kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   30m
+
+NAME                         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR            AGE
+daemonset.apps/calico-node   0         0         0       0            0           kubernetes.io/os=linux   47s
+daemonset.apps/kube-proxy    3         3         0       3            0           kubernetes.io/os=linux   30m
+
+NAME                                      READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/calico-kube-controllers   0/1     0            0           47s
+deployment.apps/coredns                   0/2     2            0           30m
+
+NAME                                 DESIRED   CURRENT   READY   AGE
+replicaset.apps/coredns-7d764666f9   2         2         0       29m
+
+
+https://console.anthropic.com/oauth/authorize?ode=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference&code_challenge=xarlMU8oKyM5-pZ1RpaJpVIepH4Qp-VIRRxWXpHyIGQ&code_challenge_method=S256&state=imf4HTd1_rbZaM0nVLJrHdoXynvZ6jC7mdnzmbUIXZmdsfMgehIqSET4bHj2j4E26jzDPe903AXZgpDxSWD5GA
+
+
+--------------------------------------------------
+
+     📊 Analyse ressources + CPU                                                                                                                                                        
+                                                                                                                                                                                        
+     Vos ressources physiques :                                                                                                                                                         
+     - RAM : 15 GB ✅                                                                                                                                                                   
+     - CPUs : 8 ✅                                                                                                                                                                      
+                                                                                                                                                                                        
+     Ce qu'on pourrait allouer :                                                                                                                                                        
+                                                                                                                                                                                        
+     | VM | RAM actuelle | RAM suggérée | CPUs actuel | CPUs suggéré |                                                                                                                  
+     |----|-------------|--------------|-------------|--------------|                                                                                                                   
+     | Control-plane | 2 GB | 4 GB | 2 | 4 |                                                                                                                                            
+     | Worker | 4 GB | 6 GB | 2 | 4 |                                                                                                                                                   
+     | Total | 6 GB | 10 GB | 4 | 8 |                                                                                                                                                   
+                                                                                                                                                                                        
+     ---                     
+
+    🎯 Le vrai problème n'est PAS les ressources                                                                                                                                       
+                                                                                                                                                                                        
+     Quand je disais "ressources" pour Option A, c'était pour être complet, mais :                                                                                                      
+                                                                                                                                                                                        
+     1. CrashLoopBackOff sur kube-controller-manager → PAS un problème de RAM/CPU                                                                                                       
+     2. Containerd incompatibilité CRI → Logiciel, pas hardware                                                                                                                         
+     3. K8s 1.35 trop récent → La vraie cause                                                                                                                                           
+                                                                                                                                                                                        
+     ---                                                                                                                                                                                
+                                                                                                                                                                                        
+     💡 Ma recommandation                                                                                                                                                               
+                                                                                                                                                                                        
+     Augmenter CPU ne servira à rien pour résoudre les crashs. Le problème est :                                                                                                        
+     - K8s 1.35 exige des fonctionnalités CRI récentes                                                                                                                                  
+     - Containerd 1.7.28 sur Ubuntu 22.04 ne les supporte pas assez                                                                                                                     
+                                                                                                                                                                                        
+     La vraie solution :                                                                                                                                                                
+     Revenir à K8s 1.31.x (plus compatible) ET si on veut, augmenter RAM :                                                                                                              
+     - Control-plane : 3 GB                                                                                                                                                             
+     - Worker : 4 GB                                                                                                                                                                    
+                                                                                                                                                                                        
+     ---                                                                                                                                                                                
+                                                                                                                                                                                        
+     ❓ Êtes-vous d'accord ?                                                                                                                                                            
+                                                                                                                                                                                        
+     1. K8s 1.31 (pas de changement CPU/RAM mandatory)                                                                                                                                  
+     2. K8s 1.31 + plus de RAM (3GB control-plane, 4GB worker)                                                                                                                          
+     3. K8s 1.31 + plus de RAM + plus de CPU    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
