@@ -98,12 +98,68 @@ Ces erreurs indiquent une incompatibilité entre containerd 1.7.28 (Ubuntu 22.04
 
 ---
 
-## 7. Résumé des modifications à apporter
+## 7. Solution finale : Installation manuelle de Containerd 2.x
 
-1. Changer `IMAGE` dans Vagrantfile vers `bento/ubuntu-24.04`
-2.eventuellement augmenter les ressources si nécessaire
-3. Recréer le cluster avec `vagrant destroy && vagrant up --provision`
+### Problème identifié
+Même avec Ubuntu 24.04, containerd intégré est encore en version 1.7.x, insuffisant pour K8s 1.35 qui exige CRI v1 complet.
+
+### Solution retenue : Installation manuelle de containerd 2.x
+
+#### Composants installés manuellement :
+| Composant | Version | Source |
+|-----------|---------|---------|
+| containerd | 2.0.2 | GitHub releases |
+| runc | 1.2.0 | GitHub releases |
+| CNI plugins | 1.4.0 | GitHub releases |
+
+#### Étapes d'installation :
+1. Désactiver swap
+2. Installer les dépendances (apt-transport-https, curl, wget, gnupg)
+3. Télécharger containerd 2.0.2 depuis GitHub
+4. Extraire vers /usr/local
+5. Télécharger et installer runc vers /usr/local/sbin
+6. Télécharger et installer CNI plugins vers /opt/cni/bin
+7. Configurer containerd avec SystemdCgroup=true
+8. Créer le service systemd pour containerd
+
+#### Commandes clés :
+```bash
+# Containerd
+wget https://github.com/containerd/containerd/releases/download/v2.0.2/containerd-2.0.2-linux-amd64.tar.gz
+tar -C /usr/local -xzf containerd-2.0.2-linux-amd64.tar.gz
+
+# Runc
+wget https://github.com/opencontainers/runc/releases/download/v1.2.0/runc.amd64
+install -m 755 runc.amd64 /usr/local/sbin/runc
+
+# CNI plugins
+wget https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+tar -C /opt/cni/bin -xzf cni-plugins-linux-amd64-v1.4.0.tgz
+```
+
+### Fichiers modifiés :
+- `scripts/vagrant/init_k8s.sh` - Ajout de l'installation manuelle de containerd 2.x
+- `Vagrantfile` - Ubuntu 24.04 + ressources augmentées
 
 ---
 
-*Analyse réalisée le 26 janvier 2025*
+## 8. Résumé des modifications apportées
+
+### Modifications Vagrantfile :
+| Paramètre | Avant | Après |
+|-----------|-------|-------|
+| IMAGE | bento/ubuntu-22.04 | bento/ubuntu-24.04 |
+| Control-plane RAM | 2 GB | 3 GB |
+| Worker RAM | 4 GB | 4 GB |
+
+### Modifications scripts/vagrant/init_k8s.sh :
+- Suppression de l'installation automatique de containerd via apt
+- Ajout de l'installation manuelle de containerd 2.0.2
+- Ajout de runc 1.2.0
+- Ajout de CNI plugins 1.4.0
+- Configuration de containerd avec SystemdCgroup=true
+- Création du service systemd pour containerd
+
+---
+
+*Analyse réalisée le 26 janvier 2025, mise à jour le 21 février 2025 avec solution containerd 2.x*

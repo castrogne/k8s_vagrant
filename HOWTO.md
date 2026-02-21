@@ -145,6 +145,53 @@ Voir :
 - https://medium.com/@mukesh.yadav_86837/how-to-fix-error-unable-to-upgrade-connection-pod-does-not-exist-fa90b7d1e44b
 - https://medium.com/@kanrangsan/how-to-specify-internal-ip-for-kubernetes-worker-node-24790b2884fd
 
+## Backup et Restauration
+
+### À propos
+Ces scripts sont à utiliser **uniquement** lors d'une montée de version de Kubernetes nécessitant un `vagrant destroy && vagrant up`. Pour un usage quotidien (arrêt/démarrage), les **snapshots VirtualBox** suffisent largement.
+
+### Prérequis
+- Cluster Kubernetes fonctionnel
+- Vagrant installé
+
+### Backup (avant upgrade)
+
+```bash
+# Créer un backup du cluster
+./scripts/vagrant/backup-k8s.sh
+```
+
+Un dossier `backups/k8s-AAAAMMJJ_HHMMSS/` sera créé contenant :
+- `etcd.tar.gz` - Base de données complète du cluster
+- `pki.tar.gz` - Certificats Kubernetes
+
+### Restauration (après upgrade)
+
+```bash
+# Lister les backups disponibles
+ls ./backups/
+
+# Restaurer un backup spécifique
+./scripts/vagrant/restore-k8s.sh 20260221_143000
+```
+
+### Notes importantes
+
+- **Snapshot = solution recommandée** pour un usage quotidien
+- **Backup/Restore = uniquement pour les upgrades majeurs**
+- Le backup contient tout l'état (Helm, déploiements, services, etc.)
+- Pas besoin de vos fichiers values.yaml - tout est dans etcd
+
+### Pour un usage quotidien
+
+```bash
+# Arrêter le cluster
+vagrant halt
+
+# Reprendre plus tard (instantané)
+vagrant snapshot restore cluster-ready
+```
+
 ## Références
 
 - Documentation originale : https://kanops.io/blog/deployer-cluster-kubernetes-local-vagrant

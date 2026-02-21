@@ -1,5 +1,5 @@
 NMB_CONTROL_PLANE = 1
-NMB_WORKER = 1
+NMB_WORKER = 2
 IMAGE= "bento/ubuntu-24.04"
 
 
