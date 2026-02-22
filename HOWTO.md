@@ -5,6 +5,29 @@
 ### 0- Installation de kubectl et autocompletion
 Voir : https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
 
+**Important** : kubectl doit être compatible avec la version du cluster. Si le cluster utilise Kubernetes 1.35+, kubectl doit être en version 1.35 ou ultérieure.
+
+**Via snap (version peut être obsolète)** :
+```bash
+snap install kubectl --classic
+snap refresh kubectl
+```
+
+**Méthode recommandée (installation manuelle)** :
+```bash
+# Télécharger la dernière version
+curl -LO "https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl"
+
+# Rendre executable et déplacer
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/kubectl
+```
+
+**Vérifier** :
+```bash
+kubectl version --client
+```
+
 ### 1- Installation de VirtualBox
 Utilisez le script `install_virtualbox.sh` (testé sur Ubuntu 22.04)
 
@@ -42,16 +65,6 @@ kubectl get nodes -o wide
 ```
 
 **Note importante** : L'installation utilise maintenant la méthode manuelle pour contourner les problèmes de dépôts pkgs.k8s.io. Les packages sont téléchargés directement depuis les releases officielles Kubernetes.
-
-### 3- Installation du réseau (Calico)
-```bash
-kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml
-```
-
-### 4- Vérification du cluster
-```bash
-kubectl get nodes -o wide
-```
 
 ### 5- Création d'un snapshot (recommandé)
 ```bash

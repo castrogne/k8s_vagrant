@@ -8,6 +8,8 @@ Vagrant.configure("2") do |config|
   config.vm.provider "virtualbox" do |v|
     v.memory = 3072
     v.cpus = 2
+    # Generate unique MAC addresses for each VM
+    v.customize ["modifyvm", :id, "--macaddress1", "auto"]
   end
 
   # Control plane
@@ -15,7 +17,12 @@ Vagrant.configure("2") do |config|
     config.vm.define "control-plane#{i}" do |control_plane|
       control_plane.vm.box = IMAGE
       control_plane.vm.hostname = "control-plane#{i}"
+      # Host-only network (for host ↔ VM access)
       control_plane.vm.network "private_network", ip: "192.168.56.#{i+10}"
+      # Internal network (for VM ↔ VM communication)
+      control_plane.vm.network "private_network", 
+        virtualbox__intnet: "k8s-internal",
+        ip: "10.0.10.#{i+10}"
       control_plane.vm.provision "file", source: "./.ssh/id_rsa.pub", destination: "/tmp/id_rsa.pub"
       control_plane.vm.provision "file", source: "./.ssh/id_rsa", destination: "/tmp/id_rsa"
       control_plane.vm.provision "file", source: "scripts/vagrant/start_k8s.sh", destination: "/tmp/start_k8s.sh"
@@ -30,7 +37,12 @@ Vagrant.configure("2") do |config|
     config.vm.define "worker#{i}" do |kubenodes|
       kubenodes.vm.box = IMAGE
       kubenodes.vm.hostname = "worker#{i}"
+      # Host-only network (for host ↔ VM access)
       kubenodes.vm.network "private_network", ip: "192.168.56.#{i+20}"
+      # Internal network (for VM ↔ VM communication)
+      kubenodes.vm.network "private_network", 
+        virtualbox__intnet: "k8s-internal",
+        ip: "10.0.10.#{i+20}"
       kubenodes.vm.network "forwarded_port", guest: 80, host: 30080, auto_correct: true
       kubenodes.vm.network "forwarded_port", guest: 443, host: 30443, auto_correct: true
       kubenodes.vm.provision "file", source: "./.ssh/id_rsa.pub", destination: "/tmp/id_rsa.pub"
