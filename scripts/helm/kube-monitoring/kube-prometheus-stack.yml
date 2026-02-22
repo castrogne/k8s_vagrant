@@ -17,13 +17,15 @@ prometheus:
  
   prometheusSpec:
     replicas: 1
+
     topologySpreadConstraints:
-    - maxSkew: 1
-      topologyKey: kubernetes.io/hostname
-      whenUnsatisfiable: ScheduleAnyway # indique au scheduler de le programmer, tout en priorisant les noeuds minimisant le biais (skew).
-      labelSelector:
-        matchLabels:
-          app: whoami
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            prometheus: prometheus-kube-prometheus-prometheus
+
     resources:
       requests:
         memory: 1Gi
@@ -37,7 +39,7 @@ prometheus:
     probeSelectorNilUsesHelmValues: false
 
     # ensure slow ephemere disk usage
-    retention: 2h
+    retention: 30m
     retentionSize: "500MiB"
 
   # disable unused rules
@@ -45,8 +47,71 @@ prometheus:
     create: false
 
 nodeExporter:
-  enabled: false
+  enabled: true
+  priorityClassName: system-node-critical
+
 alertmanager:
   enabled: false
+
 grafana:
-  enabled: false
+  persistence:
+    enabled: false
+  replicas: 1
+  useStatefulSet: true
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/instance: prometheus
+          app.kubernetes.io/name: grafana
+  resources:
+    requests:
+      cpu: 25m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  grafana.ini:
+    auth:
+      disable_login_form: true
+    notifiers:  
+      provisioning: true 
+    auth.proxy:
+      enabled: true
+      header_name: X-WEBAUTH-USER
+      header_property: username
+      headers: Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE Email:X-WEBAUTH-EMAIL Groups:X-WEBAUTH-GROUPS
+      auto_sign_up: true
+    users:
+      viewers_can_edit: true #  all "Viewer" as Editor role without save option (access to explorer)
+      default_theme: system
+      default_language: fr-FR
+    dashboards:
+      min_refresh_interval: 30s # override refresh community dashboards (no flood)
+  sidecar:
+    dashboards: 
+      label: grafana_dashboard 
+      folderAnnotation: grafana_folder 
+      provider: 
+        foldersFromFilesStructure: true 
+    datasources:
+      enabled: false  # no use prometheus datasource > use custom > thanos
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          access: proxy
+          type: prometheus
+          url: http://prometheus-kube-prometheus-prometheus.kube-monitoring.svc.cluster.local:9090
+          isDefault: true
+          editable: false
+          jsonData:
+            tlsSkipVerify: true
+            httpMethod: POST
+            timeInterval: "30s"
+          orgId: 1
+
+  extraConfigmapMounts: 

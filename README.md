@@ -29,15 +29,15 @@ Pour déployer le cluster, se rendre dans le répertoire où se trouve le **Vagr
 - Une fois le cluster déployé, il faudra récupérer le fichier ```kubeconfig``` permettant d'interagir avec notre cluster:
   ```bash
     # Récupérer le kubeconfig à la racine du projet
-    vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yml
+    vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yaml
   ```
 - Configurez l'accès au cluster de manière permanente :
   ```bash
     # Ajouter à votre .bashrc (adapter le chemin)
-    export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yml
+    export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yaml
     
     # Ou utiliser temporairement dans la session
-    export KUBECONFIG=$PWD/kubeconfig.yml
+    export KUBECONFIG=$PWD/kubeconfig.yaml
   ```
   **Note** : Vous devez avoir `kubectl` d'installé sur votre machine locale.
 - Avant de pouvoir utiliser notre cluster, il faudra auparavant installer un plugin k8s pour le réseau. Ici [Calico](https://docs.tigera.io/calico/latest/getting-started/kubernetes/) sera utilisé. Pour le déployer:
