@@ -78,9 +78,12 @@ IMAGE = "bento/ubuntu-24.04"  # Ubuntu Server sans GUI
 
 ---
 
-## 6. Problèmes rencontrés (historique)
+## 6. Problèmes rencontrés et corrections
 
-### Erreurs observées avec K8s 1.35 sur Ubuntu 22.04 :
+### 6.1 CrashLoopBackOff kube-controller-manager et kube-proxy
+
+#### Problème identifié
+Erreurs observées avec K8s 1.35 sur Ubuntu 22.04 :
 ```
 kube-controller-manager: CrashLoopBackOff
 kube-proxy: CrashLoopBackOff
@@ -88,7 +91,7 @@ coredns: Pending
 calico-node: 0/0 Ready
 ```
 
-### Messages d'avertissement :
+Messages d'avertissement :
 ```
 WARNING ContainerRuntimeVersion]: You must update your container runtime to a version that supports the CRI method RuntimeConfig
 detected that the sandbox image "registry.k8s.io/pause:3.8" is inconsistent with that used by kubeadm
@@ -96,23 +99,18 @@ detected that the sandbox image "registry.k8s.io/pause:3.8" is inconsistent with
 
 Ces erreurs indiquent une incompatibilité entre containerd 1.7.28 (Ubuntu 22.04) et les exigences CRI de Kubernetes 1.35.
 
----
+#### Solution : Installation manuelle de Containerd 2.x
 
-## 7. Solution finale : Installation manuelle de Containerd 2.x
-
-### Problème identifié
 Même avec Ubuntu 24.04, containerd intégré est encore en version 1.7.x, insuffisant pour K8s 1.35 qui exige CRI v1 complet.
 
-### Solution retenue : Installation manuelle de containerd 2.x
-
-#### Composants installés manuellement :
+##### Composants installés manuellement :
 | Composant | Version | Source |
 |-----------|---------|---------|
 | containerd | 2.0.2 | GitHub releases |
 | runc | 1.2.0 | GitHub releases |
 | CNI plugins | 1.4.0 | GitHub releases |
 
-#### Étapes d'installation :
+##### Étapes d'installation :
 1. Désactiver swap
 2. Installer les dépendances (apt-transport-https, curl, wget, gnupg)
 3. Télécharger containerd 2.0.2 depuis GitHub
@@ -122,7 +120,7 @@ Même avec Ubuntu 24.04, containerd intégré est encore en version 1.7.x, insuf
 7. Configurer containerd avec SystemdCgroup=true
 8. Créer le service systemd pour containerd
 
-#### Commandes clés :
+##### Commandes clés :
 ```bash
 # Containerd
 wget https://github.com/containerd/containerd/releases/download/v2.0.2/containerd-2.0.2-linux-amd64.tar.gz
@@ -137,29 +135,84 @@ wget https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni
 tar -C /opt/cni/bin -xzf cni-plugins-linux-amd64-v1.4.0.tgz
 ```
 
-### Fichiers modifiés :
-- `scripts/vagrant/init_k8s.sh` - Ajout de l'installation manuelle de containerd 2.x
+##### Résumé des modifications :
 - `Vagrantfile` - Ubuntu 24.04 + ressources augmentées
+- `scripts/vagrant/init_k8s.sh` - Installation manuelle de containerd 2.x, runc 1.2.0, CNI plugins 1.4.0
 
 ---
 
-## 8. Résumé des modifications apportées
+### 6.2 IP interne identique sur les nodes Vagrant
 
-### Modifications Vagrantfile :
-| Paramètre | Avant | Après |
-|-----------|-------|-------|
-| IMAGE | bento/ubuntu-22.04 | bento/ubuntu-24.04 |
-| Control-plane RAM | 2 GB | 3 GB |
-| Worker RAM | 4 GB | 4 GB |
+#### Symptôme
+Tous les nodes affichent la **même IP interne** (`10.0.2.15`) via `kubectl get nodes -o wide`:
+```
+NAME             INTERNAL-IP
+control-plane1   10.0.2.15
+worker1          10.0.2.15
+worker2          10.0.2.15
+```
 
-### Modifications scripts/vagrant/init_k8s.sh :
-- Suppression de l'installation automatique de containerd via apt
-- Ajout de l'installation manuelle de containerd 2.0.2
-- Ajout de runc 1.2.0
-- Ajout de CNI plugins 1.4.0
-- Configuration de containerd avec SystemdCgroup=true
-- Création du service systemd pour containerd
+Cette IP est l'IP NAT de VirtualBox (10.0.2.15), pas l'IP du réseau host-only (192.168.56.x) défini dans le Vagrantfile.
+
+#### Cause
+Kubelet utilise par défaut la première interface réseau disponible, qui est l'interface NAT (10.0.2.15) au lieu de l'interface host-only (192.168.56.x).
+
+#### Problème supplémentaire découvert
+Après avoir configuré kubelet avec `--node-ip=192.168.56.x`, un nouveau problème est apparu:
+- Les nodes ont maintenant des IPs uniques (192.168.56.11, 192.168.56.21, etc.)
+- Mais la communication inter-VMs échoue: `no route to host`
+-的原因是 VirtualBox **Host-Only** ne permet pas la communication inter-VMs par défaut!
+
+#### Solution finale : Réseau Internal Network VirtualBox
+
+Au lieu d'utiliser le réseau Host-Only pour la communication inter-VMs, on utilise un **réseau Internal Network** VirtualBox.
+
+##### Configuration Vagrantfile
+```ruby
+# Host-only network (pour host ↔ VM)
+config.vm.network "private_network", ip: "192.168.56.x"
+
+# Internal network (pour VM ↔ VM)
+config.vm.network "private_network", 
+  virtualbox__intnet: "k8s-internal",
+  ip: "10.0.10.x"
+```
+
+##### Schéma réseau final
+```
+Host ←→ Host-Only eth1 (192.168.56.x) ←→ VM
+         ↑
+    kubectl fonctionne
+
+Internal Network eth2 (10.0.10.x) ←→ VM
+         ↑
+    VM↔VM communication
+```
+
+##### Script kubelet mis à jour (init_k8s.sh)
+```bash
+# Détecte d'abord le réseau internal (10.0.10.x)
+PRIVATE_IP=$(ip -4 addr show | grep "10.0.10" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+
+# Fallback vers host-only (192.168.56.x)
+if [ -z "$PRIVATE_IP" ]; then
+    PRIVATE_IP=$(ip -4 addr show | grep "192.168.56" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+fi
+```
+
+##### IPs attendues après fix:
+| Node | IP Internal Network |
+|------|-------------------|
+| control-plane1 | 10.0.10.11 |
+| worker1 | 10.0.10.21 |
+| worker2 | 10.0.10.22 |
+
+##### Bonus: Génération automatique des MAC addresses
+Pour éviter les conflits d'adresses MAC (VMs avec la même MAC), ajout dans Vagrantfile:
+```ruby
+v.customize ["modifyvm", :id, "--macaddress1", "auto"]
+```
 
 ---
 
-*Analyse réalisée le 26 janvier 2025, mise à jour le 21 février 2025 avec solution containerd 2.x*
+*Analyse réalisée le 26 janvier 2025, mise à jour le 22 février 2025*

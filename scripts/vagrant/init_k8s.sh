@@ -145,7 +145,38 @@ EOF
 
 systemctl daemon-reload
 systemctl enable containerd
+
+# =============================================
+# Fix: Configure kubelet with correct node IP
+# =============================================
+echo "🔧 Configuring kubelet with correct node IP..."
+
+# Detect internal network IP (10.0.10.x) for VM↔VM communication
+PRIVATE_IP=$(ip -4 addr show | grep "10.0.10" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+
+# Fallback: detect host-only network IP (192.168.56.x)
+if [ -z "$PRIVATE_IP" ]; then
+    PRIVATE_IP=$(ip -4 addr show | grep "192.168.56" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+fi
+
+if [ -z "$PRIVATE_IP" ]; then
+    echo "⚠️ Could not detect private IP, using hostname-based fallback..."
+    # Fallback: use hostname to determine IP based on Vagrantfile config
+    case $(hostname) in
+        control-plane*) PRIVATE_IP="10.0.10.1$(hostname | grep -oP '\d+$')" ;;
+        worker*) PRIVATE_IP="10.0.10.2$(hostname | grep -oP '\d+$')" ;;
+    esac
+fi
+
+if [ -n "$PRIVATE_IP" ]; then
+    echo "📌 Setting node IP to: $PRIVATE_IP"
+    echo "KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP" | sudo tee /etc/default/kubelet
+else
+    echo "❌ Failed to determine node IP"
+fi
+
 systemctl enable kubelet
+
 echo "🔄 Starting containerd service..."
 systemctl start containerd
 sleep 2

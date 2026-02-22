@@ -54,6 +54,7 @@ alertmanager:
   enabled: false
 
 grafana:
+  adminPassword: "admin"
   persistence:
     enabled: false
   replicas: 1
@@ -74,15 +75,12 @@ grafana:
       memory: 512Mi
   grafana.ini:
     auth:
-      disable_login_form: true
-    notifiers:  
+      disable_login_form: false
+    notifiers:
       provisioning: true 
-    auth.proxy:
-      enabled: true
-      header_name: X-WEBAUTH-USER
-      header_property: username
-      headers: Name:X-WEBAUTH-NAME Role:X-WEBAUTH-ROLE Email:X-WEBAUTH-EMAIL Groups:X-WEBAUTH-GROUPS
-      auto_sign_up: true
+    # auth.proxy disabled - using default login form
+    # auth.proxy:
+    #   enabled: true
     users:
       viewers_can_edit: true #  all "Viewer" as Editor role without save option (access to explorer)
       default_theme: system

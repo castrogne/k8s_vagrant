@@ -1,0 +1,14 @@
+Thinking: The user wants me to search for known bugs about kubectl port-forward with Kubernetes 1.35, and check if there's an updated   
+  ┃  version. I'm in plan mode, so I can only do research. Let me search for this.                                                      
+                                                                                                                                        
+     ◈ Exa Web Search "kubectl port-forward 404 Not Found kubernetes 1.35 SPDY upgrade bug"                                             
+                                                                                                                                        
+  ┃  Thinking: I found some interesting information. Let me look at the key findings:                                                   
+  ┃                                                                                                                                                                                     
+  ┃  1. Kubernetes 1.30 and 1.31 - Transition from SPDY to WebSockets                                                                                                                   
+  ┃  2. The issue on GitHub #1332 is about kubectl port-forward not sending "Upgrade" header                                                                                            
+  ┃  3. The Stack Overflow question mentions "pod does not exist" error                                                                                                                 
+  ┃                                                                                                                                                                                     
+  ┃  Let me search more specifically for issues related to Kubernetes 1.35 and port-forward.                                                                                            
+                                                                                                                                                                                        
+     ◈ Exa Web Search "kubernetes 1.35 kubectl port-forward SPDY websocket known issues 2025 2026"    
