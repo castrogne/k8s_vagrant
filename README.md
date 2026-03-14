@@ -76,3 +76,32 @@ sudo modprobe vboxdrv
 ```
 
 Si le problème persiste, redémarrez votre machine et réessayez.
+
+### Problème de téléchargement: la barre de progression n'apparaît pas
+
+Lors de l'installation, les téléchargements (containerd, runc, CNI plugins) utilisent `wget` avec l'option `--progress=dot:giga`. Cette option affiche la progression sur une seule ligne, ce qui peut donner l'impression que le téléchargement est bloqué.
+
+**Options disponibles pour `--progress`:**
+
+| Option | Description |
+|--------|-------------|
+| `dot:giga` | Un point par 1GB (une seule ligne) - option actuelle |
+| `dot:mega` | Un point par 1MB |
+| `dot:kilo` | Un point par 1KB |
+| `bar:force` | Barre de progression |
+| (aucune) | Affichage normal multi-lignes |
+
+**Lignes à modifier dans `scripts/vagrant/init_k8s.sh`:**
+- Ligne 50: containerd
+- Ligne 65: runc
+- Ligne 77: CNI plugins
+
+**Exemple pour avoir une barre de progression:**
+```bash
+wget --progress=bar:force https://github.com/...
+```
+
+**Exemple pour affichage normal:**
+```bash
+wget https://github.com/...
+```
