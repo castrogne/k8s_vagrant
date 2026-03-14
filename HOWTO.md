@@ -66,42 +66,27 @@ kubectl get nodes -o wide
 
 **Note importante** : L'installation utilise maintenant la méthode manuelle pour contourner les problèmes de dépôts pkgs.k8s.io. Les packages sont téléchargés directement depuis les releases officielles Kubernetes.
 
-### 5- Création d'un snapshot (recommandé)
-```bash
-vagrant snapshot save cluster-ready
-```
+## Workflow avec suspend/resume
 
-## Workflow avec Snapshots (Recommandé pour usage personnel)
+> ⚠️ **Attention:** Les snapshots VirtualBox ne fonctionnent pas de manière fiable avec Calico. Voir: [docs/ANALYSE_SNAPSHOT_RESTORE.md](./docs/ANALYSE_SNAPSHOT_RESTORE.md)
 
 ### Arrêt du cluster
 ```bash
-vagrant halt
+vagrant suspend
 ```
 
-### Redémarrage rapide (instantané)
+### Redémarrage rapide
 ```bash
-vagrant snapshot restore cluster-ready
+vagrant resume
 ```
 
-### Avantages des snapshots
-- **Restauration instantanée** : quelques secondes seulement
-- **État complet préservé** : mémoire, disque, services, certificats
-- **Pas de réinitialisation** : évite les problèmes de certificats expirés
-- **Multiple snapshots** : possibilité d'avoir plusieurs états sauvegardés
+### Résolution de problèmes
+Si après un resume un node est NotReady, voir: [docs/ANALYSE_SNAPSHOT_RESTORE.md#troubleshooting](./docs/ANALYSE_SNAPSHOT_RESTORE.md#troubleshooting)
 
-### Commandes utiles pour les snapshots
+### Commandes utiles
 ```bash
-# Lister tous les snapshots
-vagrant snapshot list
-
-# Créer un nouveau snapshot
-vagrant snapshot save nom-du-snapshot
-
-# Restaurer un snapshot spécifique
-vagrant snapshot restore nom-du-snapshot
-
-# Supprimer un snapshot
-vagrant snapshot delete nom-du-snapshot
+# État des VMs
+vagrant status
 ```
 
 ## Installation rapide des services additionnels
@@ -158,10 +143,27 @@ Voir :
 - https://medium.com/@mukesh.yadav_86837/how-to-fix-error-unable-to-upgrade-connection-pod-does-not-exist-fa90b7d1e44b
 - https://medium.com/@kanrangsan/how-to-specify-internal-ip-for-kubernetes-worker-node-24790b2884fd
 
+### Tester le réseau après un problème
+
+#### Créer un pod de test
+```bash
+kubectl run test-pod --image=nginx --restart=Never
+```
+
+#### Forcer un pod sur un node spécifique
+```bash
+kubectl run test-pod --image=nginx --restart=Never --overrides='{"spec":{"nodeSelector":{"kubernetes.io/hostname":"worker2"}}}'
+```
+
+#### Tester la connectivité internet
+```bash
+kubectl exec test-pod -- curl -I https://8.8.8.8
+```
+
 ## Backup et Restauration
 
 ### À propos
-Ces scripts sont à utiliser **uniquement** lors d'une montée de version de Kubernetes nécessitant un `vagrant destroy && vagrant up`. Pour un usage quotidien (arrêt/démarrage), les **snapshots VirtualBox** suffisent largement.
+Ces scripts sont à utiliser **uniquement** lors d'une montée de version de Kubernetes nécessitant un `vagrant destroy && vagrant up`. Pour un usage quotidien, utiliser `vagrant suspend` et `vagrant resume`.
 
 ### Prérequis
 - Cluster Kubernetes fonctionnel
@@ -190,7 +192,7 @@ ls ./backups/
 
 ### Notes importantes
 
-- **Snapshot = solution recommandée** pour un usage quotidien
+- **suspend/resume = solution recommandée** pour un usage quotidien
 - **Backup/Restore = uniquement pour les upgrades majeurs**
 - Le backup contient tout l'état (Helm, déploiements, services, etc.)
 - Pas besoin de vos fichiers values.yaml - tout est dans etcd
@@ -199,10 +201,10 @@ ls ./backups/
 
 ```bash
 # Arrêter le cluster
-vagrant halt
+vagrant suspend
 
-# Reprendre plus tard (instantané)
-vagrant snapshot restore cluster-ready
+# Reprendre plus tard
+vagrant resume
 ```
 
 ## Références

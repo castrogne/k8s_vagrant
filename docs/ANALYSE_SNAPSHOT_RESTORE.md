@@ -1,133 +1,73 @@
 # Problèmes Snapshot Restore avec Kubernetes + Calico
 
-## Observations
+## Introduction
 
-### Symptômes constatés
-- Après un `vagrant halt` + restore snapshot:
-  - ✅ Tous les pods Kubernetes sont "Running"
-  - ✅ Tous les pods Calico sont "Running"
-  - ❌ La création de nouveaux pods reste bloquée en "ContainerCreating"
-  - ❌ Erreur réseau: `plugin type="calico" failed (add): error getting ClusterInformation: connection is unauthorized: Unauthorized`
-
-### Tests effectués
-1. **Réseau VM → VM:**
-   - ✅ Les VMs peuvent se pinguer entre elles (10.0.10.x)
-   - ✅ Les interfaces eth0, eth1, eth2 existent correctement
-
-2. **Calico:**
-   - ❌ Les pods Calico sont "Running" mais pas "Ready"
-   - ❌ BIRD (BGP) ne s'établit pas entre les nodes
-   - ❌ Logs: "BGP not established with 10.0.10.21,10.0.10.22"
-
-3. **Réinstallation Calico:**
-   - ❌ Supprimer + réinstaller ne résout pas le problème
-   - ❌ Supprimer les données Calico (/var/lib/calico) ne résout pas
-
-4. **Kubelet:**
-   - ❌ Redémarrer kubelet ne résout pas
-
-### Conclusions
-- Le problème est **systématique** après chaque halt/restore
-- Les données semblent "gelées" dans un état incohérent
-- Ce n'est pas un problème de réseau (les VMs communiquent)
-- Ce n'est pas un problème de Calico seul (réinstaller ne change rien)
-- À tester: restore SANS Calico (le problème est-il présent?)
+**Calico est indispensable** pour faire fonctionner Kubernetes. Sans réseau CNI (comme Calico), les pods ne peuvent pas communiquer et les nodes restent en état "NotReady".
 
 ---
 
-## Solutions envisageables
+## Solutions envisagées
 
-### 1. Utiliser etcd sur le host (Option A)
+1. **suspend/resume** - Solution rapide
+2. **halt/snapshot restore** - Snapshot VirtualBox
+3. **destroy + up complet** - Solution complète
+4. **backup/restore etcd** - TODO
 
-**Concept:** Monter le répertoire etcd depuis le host via VirtualBox Shared Folder, ainsi les données persistent et ne sont pas affectées par le snapshot.
+---
 
-**Configuration Vagrantfile:**
-```ruby
-# Sur le control-plane
-config.vm.synced_folder "./etcd-data", "/var/lib/etcd", 
-  type: "virtualbox",
-  automount: true
+## Résultats des tests
 
-# Après, réinstaller Kubernetes avec:
-kubeadm init --etcd-dir=/var/lib/etcd
+| Solution | Résultat |
+|----------|----------|
+| suspend/resume | ✅ OK |
+| halt/snapshot restore | ❌ KO |
+| destroy + up complet | ✅ OK |
+| backup/restore etcd | ⏳ TODO |
+
+---
+
+## Troubleshooting
+
+### Problème 1: halt/snapshot restore ne fonctionne pas
+
+Après un halt/snapshot restore:
+- Les pods Calico sont "Running" mais pas "Ready"
+- Erreur: `BGP not established`
+- Erreur: `connection is unauthorized`
+- Le réseau ne fonctionne pas
+
+**Cause:** L'état de Calico dans etcd devient incohérent avec l'état réel des VMs après le restore.
+
+---
+
+### Problème 2: worker2 est NotReady après suspend/resume
+Ce problème est aléatoire, mais la solution 2 ci-dessous permet de récupérer un kube stable.
+
+#### Solution 1: kubeadm join
+- ❌ Ne permet pas de résoudre le problème
+- Erreur: `e1000 eth1: Detected Tx Unit Hang`
+
+#### Solution 2: destroy + up worker2
+- ✅ Solution qui fonctionne!
+- Commandes:
+  ```
+  vagrant destroy worker2
+  vagrant up worker2 --provision
+  ```
+
+### Tester le réseau:
+
+#### Créer un pod de test
+```
+kubectl run test-pod --image=nginx --restart=Never
 ```
 
-**Avantages:**
-- etcd persiste entre les snapshots
-- Le cluster peut être restauré sans perte de données
-
-**Inconvénients:**
-- Complexe à mettre en place sur un cluster existant
-- Performance potentiellement réduite
-- Perds l'intérêt du "stateless" de etcd
-
----
-
-### 2. Utiliser suspend/resume au lieu de halt/up (Option B)
-
-**Concept:** Au lieu d'arrêter complètement les VMs, les mettre en veille.
-
-```bash
-# Au lieu de:
-vagrant halt
-vagrant up
-
-# Utiliser:
-vagrant suspend
-vagrant resume
+#### Forcer sur un node spécifique
+```
+kubectl run test-pod --image=nginx --restart=Never --overrides='{"spec":{"nodeSelector":{"kubernetes.io/hostname":"worker2"}}}'
 ```
 
-**Avantages:**
-- Les VMs ne sont pas vraiment arrêtées
-- etcd reste cohérent
-- Simple à mettre en place
-
-**Inconvénients:**
-- Consomme de la mémoire RAM en veille
-- Pas équivalent à un "vrai" arrêt
-
----
-
-### 3. Ne pas utiliser de snapshots avec Calico (Option C)
-
-**Concept:** Accepter que les snapshots ne fonctionnent pas avec Calico et utiliser une autre méthode de backup.
-
-**Méthodes alternatives:**
-- Export des manifestes: `kubectl get all --all-namespaces -o yaml > backup.yaml`
-- Backup de la config Kubernetes
-- Ne pas arrêter les VMs (les laisser tourner)
-
----
-
-## Recommandations
-
-### Pour un environnement de développement local
-
-L'**Option B** (suspend/resume) semble la plus adaptée:
-- Simple à mettre en place
-- Résout le problème de cohérence
-- Pas de modification de l'architecture
-
-### Pour un environnement de production
-
-L'**Option A** (etcd sur host) serait plus robuste, mais:
-- Requiert une réinstallation complète du cluster
-- Nécessite une configuration kubeadm modifiée
-- Complexe à maintenir
-
----
-
-## Questions ouvertes
-
-1. Pourquoi le snapshot restore cause-t-il systématiquement ce problème?
-2. Est-ce un problème connu avec Calico + VirtualBox?
-3. Y a-t-il une configuration Calico qui survive aux restores?
-
----
-
-## À tester
-
-- [ ] Option A: etcd sur host
-- [ ] Option B: suspend/resume
-- [ ] Restore SANS Calico (le problème est-il spécifique à Calico?)
-- [ ] Documenter les résultats
+#### Tester la connectivité
+```
+kubectl exec test-pod -- curl -I https://8.8.8.8
+```
