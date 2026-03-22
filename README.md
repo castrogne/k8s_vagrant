@@ -1,107 +1,136 @@
-# Mise en place d'un cluster Kubernetes en local avec *Vagrant*
+# Mise en place d'un cluster Kubernetes en local avec Vagrant
+
+## Introduction
+
+Ce projet permet de déployer un cluster Kubernetes complet en local avec Vagrant et VirtualBox. Il utilise Calico comme CNI et est configuré pour le développement local.
 
 ## Stack
-- Vagrant 2.3.4
-- Virtual Box 7.0.4
-- Ubuntu 22.04 LTS
-- Kubernetes 1.29.9
 
-## Post - déploiement
-- Installer *vagrant*
-- Installer *Virtual Box*
+| Composant | Version |
+|-----------|---------|
+| Vagrant | 2.3.x |
+| VirtualBox | 7.x |
+| Ubuntu | 24.04 LTS |
+| Kubernetes | 1.35.x |
+| Container Runtime | containerd |
+| CNI | Calico v3.25 |
 
-## Configuration
-- **Important** : Le projet utilise maintenant Ubuntu 22.04 LTS et Kubernetes 1.29.9 avec les nouveaux dépôts communautaires pkgs.k8s.io.
-- La version de **Kubernetes** peut être modifiée grâce à la variable ```KUBE_VERSION``` dans le fichier ```./scripts/vagrant/init_k8s.sh```
-- Modifier les clés de configurations ```NMB_CONTROL_PLANE``` et ```NMB_WORKER``` dans le fichier **Vagrantfile** selon la configuration que vous voulez mettre en place.
+## Prérequis
 
-## Déploiement
-Pour déployer le cluster, se rendre dans le répertoire où se trouve le **Vagrantfile**, puis exécuter la commande:
+- Vagrant installé
+- VirtualBox installé
+- kubectl installé (voir [Installation kubectl](#installation-kubectl))
+
+## Installation kubectl
+
+**Méthode recommandée (installation manuelle)** :
 ```bash
-    vagrant up --provision
+curl -LO "https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/kubectl
 ```
 
-⏳ Attendre quelques minutes le temps que les VMs soit créer et provisionner, cela dépendra du débit de votre connexion à Internet ainsi que les performances de votre machine.
+**Via snap (version peut être obsolète)** :
+```bash
+snap install kubectl --classic
+```
 
-**Note** : Tous les scripts de configuration sont dans le répertoire `./scripts/vagrant/`. L'infrastructure utilise maintenant containerd au lieu de Docker pour une meilleure compatibilité avec Kubernetes 1.29.
+Vérifier :
+```bash
+kubectl version --client
+```
 
-## Accès au cluster
-- Une fois le cluster déployé, il faudra récupérer le fichier ```kubeconfig``` permettant d'interagir avec notre cluster:
-  ```bash
-    # Récupérer le kubeconfig à la racine du projet
-    vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yaml
-  ```
-- Configurez l'accès au cluster de manière permanente :
-  ```bash
-    # Ajouter à votre .bashrc (adapter le chemin)
-    export KUBECONFIG=$HOME/Projets/perso/k8s_vagrant/kubeconfig.yaml
-    
-    # Ou utiliser temporairement dans la session
-    export KUBECONFIG=$PWD/kubeconfig.yaml
-  ```
-  **Note** : Vous devez avoir `kubectl` d'installé sur votre machine locale.
-- Avant de pouvoir utiliser notre cluster, il faudra auparavant installer un plugin k8s pour le réseau. Ici [Calico](https://docs.tigera.io/calico/latest/getting-started/kubernetes/) sera utilisé. Pour le déployer:
-  ```bash
-    kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml
-  ```
-- Ci-dessous, notre cluster disponible et prêt à accueillir les applications:
-  ![cluster_up.png](https://media.kanops.io/blog/img/k8s_vagrant/cluster_up.png)
+## Déploiement rapide
 
-## Workflow complet
+```bash
+# Déployer le cluster
+vagrant up --provision
 
-Pour la procédure d'installation et d'utilisation complète avec les snapshots, consultez le [HOWTO.md](./HOWTO.md).
+# Récupérer le kubeconfig
+vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig.yaml
+
+# Configurer l'accès permanent (ajouter au .bashrc)
+export KUBECONFIG=$PWD/kubeconfig.yaml
+
+# Installer Calico
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml
+
+# Vérifier le cluster
+kubectl get nodes -o wide
+```
+
+⏳ Attendre 5-10 minutes pour le provisionnement complet.
+
+## Usage quotidien
+
+```bash
+# Arrêter le cluster
+vagrant suspend
+
+# Reprendre
+vagrant resume
+```
+
+⚠️ **Important** : Les snapshots VirtualBox ne fonctionnent pas de manière fiable avec Calico. Utilisez `vagrant suspend/resume`.
+
+## Documentation détaillée
+
+Pour les procédures complètes (installation, services, troubleshooting, backup) :
+
+- [Installation et utilisation](./docs/INSTALL.md)
+- [Analyse snapshot/restore](./docs/ANALYSE_SNAPSHOT_RESTORE.md)
+- [Tests Velero](./docs/ANALYSE_VELERO.md)
+
+## Installation des services
+
+```bash
+# Ajout des repositories Helm
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo add jetstack https://charts.jetstack.io
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm repo update
+
+# Création des namespaces
+kubectl create ns kube-monitoring
+kubectl create ns kube-ingress
+
+# Installation services
+helm -n kube-ingress upgrade --install kube-ingress ingress-nginx/ingress-nginx -f scripts/helm/kube-ingress/ingress-nginx.yml --version 4.7.1
+helm -n kube-monitoring upgrade --install prometheus prometheus-community/kube-prometheus-stack -f scripts/helm/kube-monitoring/kube-prometheus-stack.yml --version 55.5.1
+```
 
 ## Dépannage
 
 ### VirtualBox kernel module non chargé
 
-Si vous rencontrez cette erreur lors de `vagrant up` :
-
-```
-VirtualBox is complaining that the kernel module is not loaded. Please
-run `VBoxManage --version` or open the VirtualBox GUI to see the error
-message which should contain instructions on how to fix this error.
-```
-
-Exécutez l'une de ces commandes pour corriger le problème :
-
 ```bash
 sudo /sbin/vboxconfig
-```
-
-Ou :
-
-```bash
+# ou
 sudo modprobe vboxdrv
 ```
 
-Si le problème persiste, redémarrez votre machine et réessayez.
+### Node NotReady après resume
 
-### Problème de téléchargement: la barre de progression n'apparaît pas
-
-Lors de l'installation, les téléchargements (containerd, runc, CNI plugins) utilisent `wget` avec l'option `--progress=dot:giga`. Cette option affiche la progression sur une seule ligne, ce qui peut donner l'impression que le téléchargement est bloqué.
-
-**Options disponibles pour `--progress`:**
-
-| Option | Description |
-|--------|-------------|
-| `dot:giga` | Un point par 1GB (une seule ligne) - option actuelle |
-| `dot:mega` | Un point par 1MB |
-| `dot:kilo` | Un point par 1KB |
-| `bar:force` | Barre de progression |
-| (aucune) | Affichage normal multi-lignes |
-
-**Lignes à modifier dans `scripts/vagrant/init_k8s.sh`:**
-- Ligne 50: containerd
-- Ligne 65: runc
-- Ligne 77: CNI plugins
-
-**Exemple pour avoir une barre de progression:**
 ```bash
-wget --progress=bar:force https://github.com/...
+vagrant destroy worker2
+vagrant up worker2 --provision
 ```
 
-**Exemple pour affichage normal:**
+### Tester le réseau
+
 ```bash
-wget https://github.com/...
+kubectl run test-pod --image=nginx --restart=Never
+kubectl exec test-pod -- curl -I https://8.8.8.8
 ```
+
+## Configuration
+
+- Version Kubernetes : modifier `KUBE_VERSION` dans `scripts/vagrant/init_k8s.sh`
+- Nombre de nodes : modifier `NMB_CONTROL_PLANE` et `NMB_WORKER` dans `Vagrantfile`
+
+## Références
+
+- [Documentation originale](https://kanops.io/blog/deployer-cluster-kubernetes-local-vagrant)
+- [Kubernetes docs](https://kubernetes.io/docs/)
+- [Calico docs](https://docs.tigera.io/calico/latest/)

@@ -1,2 +1,4 @@
 .vagrant
+backups
 plebicom
+kubeconfig.yaml
