@@ -70,8 +70,8 @@ Velero supporte plusieurs providers pour le stockage des backups :
 |---------|----------|--------|
 | [Session 1](#session-1--installation) | Installation MinIO + Velero | ✅ Terminée |
 | [Session 2](#session-2--backuprestore-simple) | Backup/restore simple sur même cluster | ✅ Terminée |
-| [Session 3](#session-3--backup-avec-état) | Préparation : app réaliste + backup | ⏳ À faire |
-| [Session 4](#session-4--destroy-up-restore) | Test complet destroy+restore | ⏳ À faire |
+| [Session 3](#session-3--backup-avec-état) | Backup avec ConfigMap + Service | ✅ Terminée |
+| [Session 4](#session-4--destroy-up-restore-avec-gcp) | Test complet destroy+restore avec GCP | ⏳ À faire |
 
 ---
 
@@ -307,19 +307,28 @@ velero backup describe demo-backup
 
 ### Problèmes rencontrés
 
-[À documenter]
+**Aucun problème rencontré.**
 
 ---
 
-## Session 4 : Destroy + Up + Restore complet
+## Session 4 : Destroy + Up + Restore avec GCP
 
 ### Objectif
 
-Test ultime : détruire le cluster, le recréer, et restaurer le backup.
+Test ultime : détruire le cluster, le recréer, et restaurer le backup depuis GCP Cloud Storage.
+
+**Différence avec MinIO** : Les backups sont stockés dans le cloud, ils survivent à la destruction du cluster.
 
 ### Danger ⚠️
 
 Cette session **détruit** le cluster Vagrant. Prévoir ~15-20 minutes.
+
+### Prérequis GCP (à faire avant)
+
+1. Créer un bucket GCP Cloud Storage (ex: `velero-backups-<id>`)
+2. Activer Interoperability dans GCP Console → Storage → Settings → Interoperability
+3. Générer des clés HMAC (Storage → Settings → Interoperability → Create a key)
+4. Noter l'Access Key et le Secret Key
 
 ### Commandes exécutées
 
@@ -329,13 +338,13 @@ Cette session **détruit** le cluster Vagrant. Prévoir ~15-20 minutes.
 velero backup get
 ```
 
-#### 2. Exporter le kubeconfig
+#### 2. Exporter le kubeconfig (par sécurité)
 
 ```bash
 vagrant ssh control-plane1 -c "cat /home/vagrant/.kube/config" > ./kubeconfig-backup.yaml
 ```
 
-#### 3. Backup final (par sécurité)
+#### 3. Backup final
 
 ```bash
 velero backup create final-backup --include-namespaces demo-app
@@ -363,45 +372,51 @@ export KUBECONFIG=$PWD/kubeconfig.yaml
 kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/manifests/calico.yaml
 ```
 
-#### 7. Réinstaller Velero
+#### 7. Réinstaller Velero avec GCP
 
 ```bash
-# Réappliquer MinIO
-kubectl apply -f https://raw.githubusercontent.com/vmware-tanzu/velero/main/examples/minio/00-minio-deployment.yaml
-
-# Recréer credentials
-cat > credentials-velero << 'EOF'
+# Créer les credentials GCP
+cat > credentials-gcp << 'EOF'
 [default]
-aws_access_key_id = minio
-aws_secret_access_key = minio123
+gs_access_key_id = <TA_CLE_ACCESS>
+gs_secret_access_key = <TON_SECRET>
 EOF
 
-# Réinstaller Velero server
+# Réinstaller Velero avec le provider GCP
 velero install \
-    --provider aws \
-    --plugins velero/velero-plugin-for-aws:v1.12.0 \
-    --bucket velero \
-    --secret-file ./credentials-velero \
-    --use-volume-snapshots=false \
-    --backup-location-config region=minio,s3ForcePathStyle="true",s3Url=http://minio.velero.svc:9000
+    --provider gcp \
+    --plugins velero/velero-plugin-for-gcp:v1.12.0 \
+    --bucket velero-backups-<id> \
+    --secret-file ./credentials-gcp \
+    --use-volume-snapshots=false
 ```
 
-#### 8. Vérifier Velero
+#### 8. Vérifier Velero et les backups
 
 ```bash
 kubectl get pods -n velero
 velero backup get
 ```
 
-**Note** : Les backups sont dans MinIO qui est... détruit. Il faudra une solution de stockage persistante pour ce test.
+Les backups créés précédemment avec MinIO ne seront pas visibles (stockage différent). Un nouveau backup est nécessaire.
 
-#### 9. Restore (si stockage persistante disponible)
+#### 9. Créer un backup dans GCP
 
 ```bash
-velero restore create --from-backup demo-backup
+velero backup create gcp-backup --include-namespaces demo-app
 ```
 
-#### 10. Vérifier
+#### 10. Vérifier dans GCP Console
+
+Aller dans GCP Console → Cloud Storage → Bucket → Les fichiers de backup doivent apparaître.
+
+#### 11. Restore
+
+```bash
+velero restore create --from-backup gcp-backup
+```
+
+#### 12. Vérifier
 
 ```bash
 kubectl get all -n demo-app
@@ -540,6 +555,50 @@ velero backup create backup-excl --selector 'backup notin (ignore)'
 kubectl label pod <nom> -n default backup=true
 velero backup create backup --selector 'backup=true'
 kubectl label pod <nom> -n default backup-  # nettoyer après
+```
+
+### Session 3 : Commandes et options
+
+#### Auto-complétion Velero CLI
+
+```bash
+# Bash
+velero completion bash
+echo 'source <(velero completion bash)' >> ~/.bashrc
+
+# Zsh
+velero completion zsh >> ~/.zshrc
+```
+
+#### Syntaxe `velero restore create`
+
+Velero utilise un pattern Kubernetes-like : `restore` est la commande parent, `create` est l'action.
+
+**Actions disponibles pour `velero restore`** :
+```bash
+velero restore create   # Créer un restore
+velero restore get      # Lister les restores
+velero restore describe # Détails
+velero restore logs     # Logs
+velero restore delete   # Supprimer
+```
+
+**Options principales de `velero restore create`** :
+
+| Option | Usage |
+|--------|-------|
+| `--from-backup <nom>` | Restaurer depuis un backup (utilisé dans les sessions) |
+| `--from-schedule <nom>` | Restaurer depuis le dernier backup d'un schedule |
+| `--namespace-mappings ns1:ns2` | Mapper un namespace vers un autre |
+| `--exclude-namespaces` | Exclure des namespaces |
+| `--include-namespaces` | Inclure certains namespaces |
+| `--wait` | Attendre la fin du restore |
+
+**Exemple namespace mapping** :
+```bash
+velero restore create restore-renamed \
+    --from-backup demo-backup \
+    --namespace-mappings default:demo-restore
 ```
 
 ---
