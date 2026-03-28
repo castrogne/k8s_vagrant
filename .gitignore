@@ -2,3 +2,4 @@
 backups
 plebicom
 kubeconfig.yaml
+**/credentials*

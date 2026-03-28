@@ -374,22 +374,50 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.25.0/
 
 #### 7. Réinstaller Velero avec GCP
 
+**Option A : GCP avec Interoperability (clés HMAC au format AWS)**
+
+Cette option utilise les clés HMAC créées pour l'accès interopérable S3.
+
 ```bash
-# Créer les credentials GCP
+# Créer les credentials GCP (format AWS S3)
 cat > credentials-gcp << 'EOF'
 [default]
-gs_access_key_id = <TA_CLE_ACCESS>
-gs_secret_access_key = <TON_SECRET>
+aws_access_key_id = <TA_CLE_ACCESS>
+aws_secret_access_key = <TON_SECRET>
 EOF
 
-# Réinstaller Velero avec le provider GCP
+# Réinstaller Velero avec le provider AWS (qui parle S3 à GCP)
+velero install \
+    --provider aws \
+    --plugins velero/velero-plugin-for-aws:v1.8.2 \
+    --bucket k8s_vagrant_velero \
+    --secret-file ./credentials-gcp \
+    --use-volume-snapshots=false \
+    --backup-location-config region=us-east1,s3ForcePathStyle="true",s3Url=https://storage.googleapis.com
+```
+
+**Note** : Nécessite d'activer "Interoperability" dans GCP Console. Utiliser impérativement la version v1.8.2 du plugin (v1.9+ casse la compatibilité S3 tierce).
+
+---
+
+**Option B : GCP natif (fichier JSON Service Account)** ✅ Recommandé
+
+Cette option utilise le fichier JSON du compte de service Google.
+
+```bash
+# 1. Télécharger le fichier JSON du compte de service
+# GCP Console → IAM → Comptes de service → Clés → Créer une clé JSON
+
+# 2. Réinstaller Velero avec le provider GCP
 velero install \
     --provider gcp \
     --plugins velero/velero-plugin-for-gcp:v1.12.0 \
-    --bucket velero-backups-<id> \
-    --secret-file ./credentials-gcp \
+    --bucket <NOM_BUCKET> \
+    --secret-file ./chemin/vers/velero-sa-key.json \
     --use-volume-snapshots=false
 ```
+
+**Note** : Pas besoin d'Interoperability. Utilise les credentials Google natifs.
 
 #### 8. Vérifier Velero et les backups
 
@@ -424,7 +452,124 @@ kubectl get all -n demo-app
 
 ### Problèmes rencontrés
 
-[À documenter]
+**Problème 1** : `velero install` avec GCP ne remplace pas le BackupStorageLocation existant (MinIO). 
+Le message "already exists" a été ignoré.
+
+**Solution** : Supprimer l'ancien BackupStorageLocation, MinIO, puis créer le nouveau BSL GCP.
+
+```bash
+# Supprimer l'ancien BackupStorageLocation MinIO
+kubectl delete backupstoragelocation default -n velero
+
+# ATTENTION : Le YAML MinIO inclut le namespace velero !
+# Supprimer le YAML MinIO SUPPRIME LE NAMESPACE ENTIER (y compris Velero)
+kubectl delete -f https://raw.githubusercontent.com/vmware-tanzu/velero/main/examples/minio/00-minio-deployment.yaml
+```
+
+**Problème 2** : Suppression du namespace velero bloquée.
+
+Le namespace reste en "Terminating" à cause de restores et CRDs persistants.
+
+**Solution** : Supprimer les CRDs Velero.
+
+```bash
+kubectl delete crds \
+  backups.velero.io \
+  backupstoragelocations.velero.io \
+  restores.velero.io \
+  schedules.velero.io \
+  serverstatusrequests.velero.io \
+  volumesnapshotlocations.velero.io \
+  podvolumebackups.velero.io \
+  podvolumerestores.velero.io \
+  deletebackuprequests.velero.io \
+  downloadrequests.velero.io \
+  backuprepositories.velero.io \
+  datadownloads.velero.io \
+  datauploads.velero.io
+```
+
+**Problème 3** : Désinstallation complète de Velero.
+
+Le namespace peut rester bloqué en "Terminating" si les CRDs ne sont pas supprimés en premier.
+
+**Solution** : Supprimer les CRDs avant le namespace.
+
+```bash
+# 1. Supprimer les CRDs (supprime aussi les ressources)
+kubectl delete crds \
+  backuprepositories.velero.io \
+  backups.velero.io \
+  backupstoragelocations.velero.io \
+  deletebackuprequests.velero.io \
+  downloadrequests.velero.io \
+  podvolumebackups.velero.io \
+  podvolumerestores.velero.io \
+  restores.velero.io \
+  schedules.velero.io \
+  serverstatusrequests.velero.io \
+  volumesnapshotlocations.velero.io \
+  datadownloads.velero.io \
+  datauploads.velero.io
+
+# 2. Supprimer le namespace
+kubectl delete namespace velero
+
+# 3. Vérifier
+kubectl get crds | grep velero  # Ne doit rien retourner
+kubectl get ns | grep velero     # Ne doit rien retourner
+```
+
+**Ordre IMPORTANT** : CRDs AVANT namespace.
+
+---
+
+**Problème 4** : Plugin AWS v1.9+ incompatible avec GCP Interoperability (HMAC keys).
+
+**Symptôme** : `SignatureDoesNotMatch: Access denied` même avec les bonnes credentials.
+
+**Cause** : Le plugin AWS de Velero a changé le mécanisme de signature AWS SDK en v1.9+, ce qui a cassé la compatibilité avec les systèmes S3 tierces (GCP, IBM COS, Backblaze, etc.).
+
+**Solution** : Utiliser impérativement la version v1.8.2 du plugin AWS :
+```bash
+--plugins velero/velero-plugin-for-aws:v1.8.2
+```
+
+**Source** : [Velero AWS Plugin and SignatureDoesNotMatch nonsense](https://scaleoutsean.github.io/2024/07/13/velero-aws-plugin-s3-signature-does-not-match-nonsense.html)
+
+---
+
+### Commandes pour installation Velero avec GCP (après destroy+up)
+
+**Option A : GCP avec Interoperability**
+
+```bash
+# 1. Vérifier que kubectl fonctionne
+kubectl get nodes
+
+# 2. Créer le fichier credentials GCP (format AWS S3)
+cat > credentials-gcp << 'EOF'
+[default]
+aws_access_key_id = <TA_CLE_ACCESS>
+aws_secret_access_key = <TON_SECRET>
+EOF
+
+# 3. Installer Velero avec le provider AWS (qui parle S3 à GCP)
+velero install \
+    --provider aws \
+    --plugins velero/velero-plugin-for-aws:v1.8.2 \
+    --bucket k8s_vagrant_velero \
+    --secret-file ./credentials-gcp \
+    --use-volume-snapshots=false \
+    --backup-location-config region=us-east1,s3ForcePathStyle="true",s3Url=https://storage.googleapis.com
+
+# 4. Vérifier
+kubectl get pods -n velero
+velero backup get
+kubectl get backupstoragelocation -n velero
+```
+
+**Option B : GCP natif (voir section 7 Option B)**
 
 ---
 
