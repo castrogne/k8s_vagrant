@@ -69,7 +69,7 @@ Velero supporte plusieurs providers pour le stockage des backups :
 | Session | Objectif | Statut |
 |---------|----------|--------|
 | [Session 1](#session-1--installation) | Installation MinIO + Velero | ✅ Terminée |
-| [Session 2](#session-2--backuprestore-simple) | Backup/restore simple sur même cluster | ⏳ À faire |
+| [Session 2](#session-2--backuprestore-simple) | Backup/restore simple sur même cluster | ✅ Terminée |
 | [Session 3](#session-3--backup-avec-état) | Préparation : app réaliste + backup | ⏳ À faire |
 | [Session 4](#session-4--destroy-up-restore) | Test complet destroy+restore | ⏳ À faire |
 
@@ -262,7 +262,7 @@ kubectl get all -n nginx-example
 
 ### Problèmes rencontrés
 
-[À documenter]
+**Aucun problème rencontré.**
 
 ---
 
@@ -464,6 +464,83 @@ velero backup create backup-excl --selector 'backup notin (ignore)'
 - [ ] Backup planifié (schedule)
 - [ ] Backup de volumes persistants (PVC)
 - [ ] Migration vers autre cluster
+
+---
+
+## Remarques
+
+### Session 1 : RBAC et ServiceAccount
+
+**Observation** : `velero install` utilise le kubeconfig utilisateur courant 
+(via `~/.kube/config`), sans créer de ServiceAccount dédié.
+
+**Pattern production recommandé :**
+
+```bash
+# 1. Créer un ServiceAccount dédié
+kubectl create serviceaccount velero -n velero
+
+# 2. Créer ClusterRole avec droits minimaux
+kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: velero
+rules:
+- apiGroups: ["*"]
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: velero
+subjects:
+- kind: ServiceAccount
+  name: velero
+  namespace: velero
+EOF
+```
+
+**Principe** : Principe du moindre privilège - le compte Velero n'a que 
+les droits nécessaires, pas les droits admin.
+
+**Note** : En dev/test, utiliser le kubeconfig utilisateur est acceptable.
+
+### Session 2 : Commandes de backup
+
+**Observation** : Velero permet debacker plusieurs namespaces ou par label.
+
+#### Backup multi-namespaces
+
+```bash
+# Un seul backup pour plusieurs namespaces
+velero backup create backup-multi --include-namespaces nginx-example,default
+
+# Backup de tous les namespaces (sauf système)
+velero backup create backup-full --exclude-namespaces kube-system,kube-public,kube-ingress,kube-node-lease,velero,calico-system
+```
+
+#### Backup par label
+
+```bash
+# Backup avec selector (OR logique)
+velero backup create backup-sel --selector 'app=nginx || app=test-pod'
+
+# Backup en excluant par label
+velero backup create backup-excl --selector 'backup notin (ignore)'
+```
+
+**Note** : Pourbacker un pod sans label, ajouter un label temporaire :
+```bash
+kubectl label pod <nom> -n default backup=true
+velero backup create backup --selector 'backup=true'
+kubectl label pod <nom> -n default backup-  # nettoyer après
+```
 
 ---
 
