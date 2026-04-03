@@ -12,6 +12,30 @@ cat /home/vagrant/.ssh/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
 chmod 400 /home/vagrant/.ssh/authorized_keys
 chown vagrant: /home/vagrant/.ssh/authorized_keys
 
+# Download function with local cache
+download_with_cache() {
+    local url="$1"
+    local dest="$2"
+    local cache_dir="/vagrant/vagrant_download"
+    
+    local filename=$(basename "$url")
+    local cached_file="$cache_dir/$filename"
+    
+    mkdir -p "$cache_dir"
+    
+    if [ -f "$cached_file" ]; then
+        echo "📦 Using cached file: $filename"
+        cp "$cached_file" "$dest"
+    else
+        echo "⬇️ Downloading $filename..."
+        wget --progress=dot:giga "$url" -O "$dest"
+        if [ $? -eq 0 ]; then
+            cp "$dest" "$cached_file"
+            echo "💾 Cached for next time: $filename"
+        fi
+    fi
+}
+
 # Enable modules for containerd
 cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
 overlay
@@ -45,11 +69,10 @@ echo "📦 Installing dependencies..."
 apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg wget
 
 # Download and install containerd 2.x
-echo "⬇️ Downloading containerd 2.0.2..."
 cd /tmp
-wget --progress=dot:giga https://github.com/containerd/containerd/releases/download/v2.0.2/containerd-2.0.2-linux-amd64.tar.gz
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to download containerd 2.0.2"
+download_with_cache "https://github.com/containerd/containerd/releases/download/v2.0.2/containerd-2.0.2-linux-amd64.tar.gz" "/tmp/containerd-2.0.2-linux-amd64.tar.gz"
+if [ ! -f containerd-2.0.2-linux-amd64.tar.gz ]; then
+    echo "❌ Failed to get containerd 2.0.2"
     exit 1
 fi
 echo "📂 Extracting containerd..."
@@ -61,10 +84,9 @@ fi
 echo "✅ containerd 2.0.2 installed"
 
 # Download and install runc
-echo "⬇️ Downloading runc..."
-wget --progress=dot:giga https://github.com/opencontainers/runc/releases/download/v1.2.0/runc.amd64
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to download runc"
+download_with_cache "https://github.com/opencontainers/runc/releases/download/v1.2.0/runc.amd64" "/tmp/runc.amd64"
+if [ ! -f runc.amd64 ]; then
+    echo "❌ Failed to get runc"
     exit 1
 fi
 echo "📂 Installing runc..."
@@ -72,11 +94,10 @@ install -m 755 runc.amd64 /usr/local/sbin/runc
 echo "✅ runc installed"
 
 # Download and install CNI plugins
-echo "⬇️ Downloading CNI plugins..."
 mkdir -p /opt/cni/bin
-wget --progress=dot:giga https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to download CNI plugins"
+download_with_cache "https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz" "/tmp/cni-plugins-linux-amd64-v1.4.0.tgz"
+if [ ! -f cni-plugins-linux-amd64-v1.4.0.tgz ]; then
+    echo "❌ Failed to get CNI plugins"
     exit 1
 fi
 echo "📂 Extracting CNI plugins..."

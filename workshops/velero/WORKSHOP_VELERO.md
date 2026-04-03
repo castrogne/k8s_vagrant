@@ -71,7 +71,7 @@ Velero supporte plusieurs providers pour le stockage des backups :
 | [Session 1](#session-1--installation) | Installation MinIO + Velero | ✅ Terminée |
 | [Session 2](#session-2--backuprestore-simple) | Backup/restore simple sur même cluster | ✅ Terminée |
 | [Session 3](#session-3--backup-avec-état) | Backup avec ConfigMap + Service | ✅ Terminée |
-| [Session 4](#session-4--destroy-up-restore-avec-gcp) | Test complet destroy+restore avec GCP | ⏳ À faire |
+| [Session 4](#session-4--destroy-up-restore-avec-gcp) | Test complet destroy+restore avec GCP | ✅ Terminée |
 
 ---
 
@@ -431,24 +431,53 @@ Les backups créés précédemment avec MinIO ne seront pas visibles (stockage d
 #### 9. Créer un backup dans GCP
 
 ```bash
-velero backup create gcp-backup --include-namespaces demo-app
+# Backup de plusieurs namespaces
+velero backup create gcp-backup --include-namespaces demo-app,default
 ```
 
-#### 10. Vérifier dans GCP Console
+#### 10. Vérifier le backup
+
+```bash
+# Le backup apparaît après ~1 minute (sync périodique)
+velero backup get
+kubectl get backupstoragelocation -n velero
+```
+
+#### 11. Vérifier dans GCP Console
 
 Aller dans GCP Console → Cloud Storage → Bucket → Les fichiers de backup doivent apparaître.
 
-#### 11. Restore
+#### 12. Restore
 
 ```bash
 velero restore create --from-backup gcp-backup
 ```
 
-#### 12. Vérifier
+#### 13. Vérifier
 
 ```bash
 kubectl get all -n demo-app
 ```
+
+---
+
+### Résumé Session 4
+
+**Commandes de backup/restore validées :**
+
+```bash
+# Backup (avant destroy)
+velero backup create gcp-backup --include-namespaces demo-app,default
+
+# Restore (après recreation du cluster)
+velero restore create --from-backup gcp-backup
+
+# Vérification
+velero backup get
+kubectl get all -n demo-app
+```
+
+**Résultat :** ✅ Backup survives au destroy du cluster, restore fonctionnel depuis GCP.
 
 ### Problèmes rencontrés
 
