@@ -1,0 +1,36 @@
+---
+# Docs
+## https://github.com/apache/apisix-helm-chart
+## https://apisix.apache.org/docs/helm-chart/apisix/
+
+# Init
+## helm repo add apisix https://apache.github.io/apisix-helm-chart
+## helm repo update
+## kubectl create ns kube-gateway
+
+# Deploy or Upgrade
+## helm -n kube-gateway upgrade --install apisix apisix/apisix --version 2.13.0 -f helm/apisix/gateway-apisix.yml
+
+# NOTE: Modify <CREDENTIAL_ADMIN> and <CREDENTIAL_VIEWER> with your actual credentials before running helm upgrade
+
+etcd:  
+  persistence:
+    enabled: false
+
+service:
+  http:
+    servicePort: 80
+    nodePort: 30080
+  tls:
+    servicePort: 443
+    nodePort: 30443
+
+apisix:
+  admin:
+    allow:
+      ipList:
+        - 127.0.0.1/24
+        - 192.168.0.0/16
+    credentials:
+      admin: <CREDENTIAL_ADMIN>
+      viewer: <CREDENTIAL_VIEWER>

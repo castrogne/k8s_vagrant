@@ -1,0 +1,31 @@
+---
+# Docs
+## https://github.com/apache/apisix-helm-chart
+## https://apisix.apache.org/docs/helm-chart/apisix-ingress-controller/
+
+# Init (si pas déjà fait)
+## helm repo add apisix https://apache.github.io/apisix-helm-chart
+## helm repo update
+
+# Deploy or Upgrade
+## helm -n kube-gateway upgrade --install apisix-ingress-controller apisix/apisix-ingress-controller --version 1.1.2 -f helm/apisix/ingress-controller-apisix.yml
+
+# NOTE: Modify <CREDENTIAL_ADMIN> with your actual admin key (same as in gateway-apisix.yml) before running helm upgrade
+
+gatewayProxy:
+  createDefault: false
+  provider:
+    controlPlane:
+      auth:
+        adminKey:
+          value: <CREDENTIAL_ADMIN>
+
+apisix:
+  adminService:
+    namespace: kube-gateway
+    name: apisix-admin
+    port: 9180
+
+config:
+  kubernetes:
+    apiServerUrl: https://kubernetes.default.svc:443

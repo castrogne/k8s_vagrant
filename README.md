@@ -72,6 +72,7 @@ vagrant resume
 ```
 
 ⚠️ **Important** : Les snapshots VirtualBox ne fonctionnent pas de manière fiable avec Calico. Utilisez `vagrant suspend/resume`.
+⚠️ **Important** : L'utilisation de suspend/resume est également assez aléatoire. le 'up" a été accéléré via pré-download automatique, et velero est conseillé.
 
 ## Documentation détaillée
 
@@ -79,26 +80,13 @@ Pour les procédures complètes (installation, services, troubleshooting, backup
 
 - [Installation et utilisation](./docs/INSTALL.md)
 - [Analyse snapshot/restore](./docs/ANALYSE_SNAPSHOT_RESTORE.md)
-- [Tests Velero](./docs/ANALYSE_VELERO.md)
 
-## Installation des services
+## Workshops
 
-```bash
-# Ajout des repositories Helm
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo add jetstack https://charts.jetstack.io
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-helm repo update
-
-# Création des namespaces
-kubectl create ns kube-monitoring
-kubectl create ns kube-ingress
-
-# Installation services
-helm -n kube-ingress upgrade --install kube-ingress ingress-nginx/ingress-nginx -f scripts/helm/kube-ingress/ingress-nginx.yml --version 4.7.1
-helm -n kube-monitoring upgrade --install prometheus prometheus-community/kube-prometheus-stack -f scripts/helm/kube-monitoring/kube-prometheus-stack.yml --version 55.5.1
-```
+- [Backups Velero](./workshops/velero/ANALYSE_VELERO.md)
+- [Prometheus & GRafana](./workshops/preometheus/PROMETHEUS_UPGRADE.md)
+- [Gateway Prometheus](./workshops/Gateway/GATEWAY_API_MIGRATION.md)
+  - [Gateway APISIX](./workshops/Gateway/Workshop_APISIX.md)
 
 ## Dépannage
 

@@ -390,7 +390,7 @@ EOF
 velero install \
     --provider aws \
     --plugins velero/velero-plugin-for-aws:v1.8.2 \
-    --bucket k8s_vagrant_velero \
+    --bucket k8s_vagrant_velero_us \
     --secret-file ./credentials-gcp \
     --use-volume-snapshots=false \
     --backup-location-config region=us-east1,s3ForcePathStyle="true",s3Url=https://storage.googleapis.com
@@ -587,7 +587,7 @@ EOF
 velero install \
     --provider aws \
     --plugins velero/velero-plugin-for-aws:v1.8.2 \
-    --bucket k8s_vagrant_velero \
+    --bucket k8s_vagrant_velero_us \
     --secret-file ./credentials-gcp \
     --use-volume-snapshots=false \
     --backup-location-config region=us-east1,s3ForcePathStyle="true",s3Url=https://storage.googleapis.com
