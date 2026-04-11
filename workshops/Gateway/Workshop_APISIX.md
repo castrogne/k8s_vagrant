@@ -1,5 +1,56 @@
 # Workshop APISIX - Accès Grafana via Gateway API
 
+## Introduction
+
+APISIX est une gateway API cloud-native qui utilise le standard Kubernetes **Gateway API** pour gérer le routage.
+
+### Architecture simplifiée
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │      KUBERNETES (Gateway API)                │
+                    │                                              │
+   [Navigateur] ──▶ │  ┌─────── Gateway ───────┐                   │
+   ou curl          │  │  (entry point)        │                   │
+                    │  │       │               │                   │
+                    │  │  HTTPRoute ────► Service                  │
+                    │  │  TLS refs ───────► Secret TLS             │
+                    │  │       │                                   │
+                    │  │  Certificate ──► Secret TLS ◀── cert-     │
+                    │  │                     manager               │
+                    │  └──────────────────────┘                    │
+                    └──────────────────────────────────────────────┘
+                              │
+                              │ APISIX Ingress Controller
+                              ▼
+                    ┌──────────────────────────────────────────────┐
+                    │         APISIX (Implementation)              │
+                    │                                              │
+                    │  GatewayProxy → Routes / SSL / Upstreams     │
+                    │                           ◀──► etcd          │
+                    └──────────────────────────────────────────────┘
+```
+
+### Définitions
+
+| Zone | Description |
+|------|-------------|
+| **Haut : Kubernetes** | Ressources standardisées Gateway API (Gateway, HTTPRoute, Certificate) |
+| **Bas : APISIX** | Implémentation interne (GatewayProxy, routes APISIX, SSL) |
+
+### Composants
+
+| Ressource | Type | Rôle |
+|----------|------|------|
+| GatewayClass | K8s Standard | Définit le controller APISIX |
+| Gateway | K8s Standard | Point d'entrée (http/https) |
+| HTTPRoute | K8s Standard | Règles de routage |
+| Certificate | cert-manager | Demande de certificat TLS |
+| GatewayProxy | APISIX | Configuration vers Admin API |
+| APISIX Routes | Interne | Routes dans APISIX |
+
+---
+
 ## Objectif
 
 Mettre en place APISIX comme Ingress/Gateway controller et exposer Grafana via un HTTPRoute.
@@ -220,32 +271,6 @@ helm upgrade --install cert-manager jetstack/cert-manager \
 
 > **Note** : Cette installation en 2 étapes est nécessaire pour éviter les timeouts. Les CRDs sont volumineuses et l'installation peut échouer si on essaie de les installer en même temps que cert-manager.
 
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: <EMAIL>
-    privateKeySecretRef:
-      name: letsencrypt-prod
-    solvers:
-      - http01:
-          ingress:
-            class: apisix
-EOF
-```
-
-> **Note** : Le challenge HTTP-01 nécessite que le port 80 soit accessible publiquement pour la validation du certificat.
-
-> **Important** : cert-manager nécessite l'activation du feature gate `ExperimentalGatewayAPISupport=true` pour supporter Gateway API.
-> Voir [cert-manager Gateway API documentation](https://cert-manager.io/docs/usage/gateway/)
-
-> **Note sur l'architecture** : Pour une architecture propre avec un minimum de ressources dans le namespace applicatif (`kube-monitoring`), le Gateway est créé dans `kube-gateway` avec `allowedRoutes.namespaces.from: All` pour autoriser les HTTPRoutes de tous les namespaces. Voir la section [Architecture recommandée](#architecture-recommandée) pour plus de détails.
-
 #### ClusterIssuer avec gatewayHTTPRoute
 
 Pour le HTTP-01 challenge avec Gateway API, utiliser `gatewayHTTPRoute` au lieu de `ingress`.
@@ -272,6 +297,13 @@ spec:
                 namespace: kube-gateway
 EOF
 ```
+> **Note** : Le challenge HTTP-01 nécessite que le port 80 soit accessible publiquement pour la validation du certificat.
+
+> **Important** : cert-manager nécessite l'activation du feature gate `ExperimentalGatewayAPISupport=true` pour supporter Gateway API.
+> Voir [cert-manager Gateway API documentation](https://cert-manager.io/docs/usage/gateway/)
+
+> **Note sur l'architecture** : Pour une architecture propre avec un minimum de ressources dans le namespace applicatif (`kube-monitoring`), le Gateway est créé dans `kube-gateway` avec `allowedRoutes.namespaces.from: All` pour autoriser les HTTPRoutes de tous les namespaces. Voir la section [Architecture recommandée](#architecture-recommandée) pour plus de détails.
+
 
 #### Gateway gw-https avec listener HTTPS
 
@@ -557,3 +589,101 @@ EOF
 ```
 
 Cette politique autorise tout le trafic egress depuis les pods CoreDNS. En production, il est recommandé de restreindre cela aux ports et destinations nécessaires (UDP/TCP port 53 vers les DNS externes).
+
+### Utiliser un certificat externe
+
+Pour utiliser un certificat TLS déjà existant (non géré par cert-manager), il suffit de :
+1. Créer le Secret TLS manuellement
+2. Le référencer dans le Gateway
+
+```bash
+# Créer le secret TLS
+kubectl create secret tls grafana-tls \
+  --cert=chemin/vers/certificat.crt \
+  --key=chemin/vers/clef.key \
+  -n kube-gateway
+```
+
+```yaml
+# Référencer dans le Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gw-external-tls
+  namespace: kube-gateway
+spec:
+  gatewayClassName: apisix
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: grafana.famille-paquin.fr
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grafana-tls
+            kind: Secret
+```
+
+> **Note**: Avec Gateway API, il n'est PAS nécessaire de créer un `ApisixTls`. L'ApisixTls n'est requis que pour les ressources Ingress ou ApisixRoute legacy.
+
+### Wildcard Certificate
+
+Un wildcard certificate permet de gérer un seul certificat pour tous les sous-domaines d'un domaine parent (ex: `*.famille-paquin.fr`).
+
+#### ⚠️ Important - Limitation Let's Encrypt
+
+**HTTP-01 ne supporte PAS les wildcard certificates.**
+
+| Challenge | Wildcard supporté ? |
+|-----------|-------------------|
+| HTTP-01 | ❌ Non |
+| DNS-01 | ✅ Oui |
+
+Pour obtenir un wildcard certificate avec Let's Encrypt, il faut utiliser le challenge **DNS-01**.
+
+#### Exemple avec DNS-01 (Cloudflare)
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod-dns01
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@famille-paquin.fr
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-famille-paquin
+  namespace: kube-gateway
+spec:
+  secretName: wildcard-famille-paquin-tls
+  dnsNames:
+    - "*.famille-paquin.fr"
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod-dns01
+```
+
+#### Tableau de correspondance
+
+| Certificate dnsNames | Listener hostname | Fonctionne ? |
+|----------------|--------------|------------|
+| `*.famille-paquin.fr` | `*.famille-paquin.fr` | ✅ |
+| `*.famille-paquin.fr` | `grafana.famille-paquin.fr` | ✅ |
+| `*.famille-paquin.fr` | `prometheus.famille-paquin.fr` | ✅ |
+| `*.famille-paquin.fr` | `autre-domaine.fr` | ❌ |
+| `*.famille-paquin.fr` | (vide/null) | ❌ |
+
+> **Note**: Avec Gateway API, chaque listener doit avoir un hostname explicite. Le wildcard matching fonctionne si le hostname demandé est un sous-domaine du wildcard.
