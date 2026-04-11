@@ -7,6 +7,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 - **NEVER make any modification without explicit user validation**, even in build mode
 - **NEVER touch files in the `workspace/` directory**
 - **Start ALL responses with the unicorn emoji** 🦄
+- **NEVER launch any command without user consultation**, even for analysis, in build or plan mode
 
 ## Project Overview
 

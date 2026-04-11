@@ -204,15 +204,21 @@ cert-manager gère les certificats TLS via Let's Encrypt.
 
 **Note** : SSL est désactivé par défaut dans le chart APISIX. Voir [values.yaml APISIX](https://github.com/apache/apisix-helm-chart/blob/master/charts/apisix/values.yaml#L229) (`apisix.ssl.enabled`).
 
+**Installation en 2 étapes** (CRDs puis Helm) :
+
 ```bash
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
+# Étape 1 : Installer les CRDs cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.1/cert-manager.crds.yaml
+
+# Étape 2 : Installer cert-manager SANS les CRDs
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace kube-gateway \
   --version v1.13.1 \
-  --set "extraArgs={--feature-gates=ExperimentalGatewayAPISupport=true}" \
-  --set crds.enabled=true
+  --set crds.enabled=false \
+  --set "extraArgs={--feature-gates=ExperimentalGatewayAPISupport=true}"
 ```
+
+> **Note** : Cette installation en 2 étapes est nécessaire pour éviter les timeouts. Les CRDs sont volumineuses et l'installation peut échouer si on essaie de les installer en même temps que cert-manager.
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -222,7 +228,7 @@ metadata:
   name: letsencrypt-prod
 spec:
   acme:
-    server: https://acme-v02.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
     email: <EMAIL>
     privateKeySecretRef:
       name: letsencrypt-prod
@@ -238,17 +244,46 @@ EOF
 > **Important** : cert-manager nécessite l'activation du feature gate `ExperimentalGatewayAPISupport=true` pour supporter Gateway API.
 > Voir [cert-manager Gateway API documentation](https://cert-manager.io/docs/usage/gateway/)
 
+> **Note sur l'architecture** : Pour une architecture propre avec un minimum de ressources dans le namespace applicatif (`kube-monitoring`), le Gateway est créé dans `kube-gateway` avec `allowedRoutes.namespaces.from: All` pour autoriser les HTTPRoutes de tous les namespaces. Voir la section [Architecture recommandée](#architecture-recommandée) pour plus de détails.
+
+#### ClusterIssuer avec gatewayHTTPRoute
+
+Pour le HTTP-01 challenge avec Gateway API, utiliser `gatewayHTTPRoute` au lieu de `ingress`.
+
+**Documentation** : [cert-manager Gateway API](https://cert-manager.io/docs/usage/gateway/)
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: <EMAIL>
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: gw-monitoring-https
+                namespace: kube-gateway
+EOF
+```
+
 #### Gateway gw-https avec listener HTTPS
 
-**Lien doc** : [Gateway API - HTTP to HTTPS redirect](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/#http-to-https-redirects)
+**Documentation** : [Gateway API - allowedRoutes](https://gateway-api.sigs.k8s.io/api-types/gateway/), [APISIX Issue #2727](https://github.com/apache/apisix-ingress-controller/issues/2727)
 
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: gw-https
-  namespace: kube-monitoring
+  name: gw-monitoring-https
+  namespace: kube-gateway
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
@@ -264,32 +299,26 @@ spec:
       protocol: HTTP
       allowedRoutes:
         namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              gateway: "enabled"
+          from: All
     - name: https
       port: 443
       protocol: HTTPS
-      hostname: "grafana.local"
+      hostname: "grafana.famille-paquin.fr"
       allowedRoutes:
         namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              gateway: "enabled"
+          from: All
       tls:
         mode: Terminate
         certificateRefs:
-          name: grafana-tls
-          kind: Secret
-          group: ""
+          - name: grafana-monitoring-tls
+            kind: Secret
+            group: ""
 EOF
 ```
 
 #### HTTPRoute redirect HTTP → HTTPS
 
-**Lien doc** : [Gateway API - HTTP to HTTPS redirect](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/#http-to-https-redirects)
+**Documentation** : [Gateway API - HTTP to HTTPS redirect](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/#http-to-https-redirects)
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -300,16 +329,17 @@ metadata:
   namespace: kube-monitoring
 spec:
   parentRefs:
-    - name: gw-https
-      namespace: kube-monitoring
+    - name: gw-monitoring-https
+      namespace: kube-gateway
       sectionName: http
   hostnames:
-    - "grafana.local"
+    - "grafana.famille-paquin.fr"
   rules:
     - filters:
         - type: RequestRedirect
           requestRedirect:
             scheme: https
+            hostname: "grafana.famille-paquin.fr"
             statusCode: 301
 EOF
 ```
@@ -321,15 +351,15 @@ cat <<EOF | kubectl apply -f -
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: hr-grafana
+  name: hr-grafana-https
   namespace: kube-monitoring
 spec:
   parentRefs:
-    - name: gw-https
-      namespace: kube-monitoring
+    - name: gw-monitoring-https
+      namespace: kube-gateway
       sectionName: https
   hostnames:
-    - "grafana.local"
+    - "grafana.famille-paquin.fr"
   rules:
     - matches:
         - path:
@@ -344,6 +374,50 @@ EOF
 ---
 
 ## Notes
+
+### Admin API APISIX
+
+L'Admin API permet de gérer APISIX en ligne de commande. C'est l'équivalent backend du Dashboard (qui est **déprécié**).
+
+**Port-forward vers l'Admin API:**
+```bash
+kubectl -n kube-gateway port-forward svc/apisix-admin 9180:9180 &
+```
+
+> **Note**: Pour accéder depuis l'extérieur du cluster, utiliser kubectl port-forward.
+
+**Documentation:** [Admin API Apache APISIX](https://apisix.apache.org/docs/apisix/latest/admin-api/)
+
+**Commandes principales:**
+
+```bash
+# Voir les routes
+curl -s http://localhost:9180/apisix/admin/routes -H "X-API-Key: <CREDENTIAL_ADMIN>"
+
+# Voir les certificats SSL
+curl -s http://localhost:9180/apisix/admin/ssls -H "X-API-Key: <CREDENTIAL_ADMIN>"
+
+# Voir les services
+curl -s http://localhost:9180/apisix/admin/services -H "X-API-Key: <CREDENTIAL_ADMIN>"
+
+# Voir les upstreams
+curl -s http://localhost:9180/apisix/admin/upstreams -H "X-API-Key: <CREDENTIAL_ADMIN>"
+
+# Créer une route (POST)
+curl -X POST http://localhost:9180/apisix/admin/routes -H "X-API-Key: <CREDENTIAL_ADMIN>" -d '{"uris":["/test"],"name":"test-route","upstream_id":"<UPSTREAM_ID>"}'
+```
+
+**API Key**: La clé définie dans `gateway-apisix.yml` (`apisix.admin.credentials.admin`).
+
+**Dashboard (deprecated):**
+Le dashboard APISIX existait en tant que projet séparé mais est maintenant **déprécié** et ne sera plus maintenu. Le nouveau dashboard sera intégré directement dans APISIX.
+
+Pour installer l'ancienne interface (non recommandé):
+```bash
+helm install apisix-dashboard apisix/apisix-dashboard -n kube-gateway
+```
+
+> **Important**: Ne pas mélanger l'usage du Dashboard avec l'APISIX Ingress Controller. Voir [Troubleshooting](https://apisix.apache.org/docs/ingress-controller/next/reference/apisix-ingress-controller/configuration-troubleshoot/)
 
 ### Compatibilité Ingress Legacy
 
@@ -388,3 +462,98 @@ Pour une sécurité renforcée en production, utiliser **ReferenceGrant** pour a
 >
 > Ce comportement est attendu selon la spécification Gateway API.
 > Voir [Issue #2727](https://github.com/apache/apisix-ingress-controller/issues/2727) pour plus de détails.
+
+### Architecture recommandée
+
+Cette section décrit l'architecture recommandée pour APISIX Gateway API avec TLS, permettant de garder un minimum de ressources dans le namespace applicatif.
+
+#### Principe
+
+Pour une architecture propre et centralisée :
+- Le **Gateway** avec TLS et le **GatewayProxy** sont créés dans le namespace d'infrastructure (`kube-gateway`)
+- Seuls les **HTTPRoutes** sont créés dans le namespace applicatif (`kube-monitoring`)
+- Le ClusterIssuer est un ressource cluster-wide (non-namespaced)
+
+| Namespace | Ressources | Raison |
+|-----------|-----------|--------|
+| `kube-gateway` | Gateway, GatewayProxy, GatewayClass, ClusterIssuer, Certificate | Infrastructure centrale |
+| `kube-monitoring` | **Uniquement HTTPRoutes** | Application uniquement |
+
+#### Avantages
+
+- **GatewayProxy** reste dans `kube-gateway` (pas de cross-namespace pour le service admin API)
+- **Gateway** avec TLS dans `kube-gateway` avec `allowedRoutes.namespaces.from: All` pour autoriser les HTTPRoutes de tous les namespaces
+- **HTTPRoute** dans `kube-monitoring` référence le Gateway via `parentRefs` avec le namespace explicite
+- **Certificate** créé par cert-manager dans `kube-gateway` (le Secret TLS est dans le même namespace que le Gateway)
+
+#### Résumé des références officielles
+
+| Sujet | Documentation |
+|-------|--------------|
+| allowedRoutes | [Gateway API](https://gateway-api.sigs.k8s.io/api-types/gateway/) |
+| Cross-namespace routing | [Gateway API Security](https://gateway-api.sigs.k8s.io/concepts/security/) |
+| ReferenceGrant | [ReferenceGrant API](https://gateway-api.sigs.k8s.io/api-types/referencegrant/) |
+| APISIX cross-namespace | [APISIX Issue #2727](https://github.com/apache/apisix-ingress-controller/issues/2727) |
+| cert-manager Gateway | [cert-manager Gateway](https://cert-manager.io/docs/usage/gateway/) |
+
+### Prérequis réseau pour Let's Encrypt
+
+Certains environnements Kubernetes (notamment avec Calico comme CNI) bloquent le trafic egress des pods par défaut. Cela peut empêcher cert-manager de résoudre les serveurs DNS de Let's Encrypt et de valider les certificats via HTTP-01.
+
+#### Configuration du DNS
+
+Par défaut, CoreDNS utilise le DNS des nodes. Si les pods ne peuvent pas résoudre les domaines externes, modifier CoreDNS pour forwarder vers un DNS externe :
+
+```bash
+kubectl patch configmap coredns -n kube-system --type merge -p '{"data":{"Corefile":"
+.:53 {
+    errors
+    health {
+       lameduck 5s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+       ttl 30
+    }
+    prometheus :9153
+    forward . 8.8.8.8 1.1.1.1 {
+       max_concurrent 1000
+    }
+    cache 30 {
+       disable success cluster.local
+       disable denial cluster.local
+    }
+    loop
+    reload
+    loadbalance
+}
+"}}}'
+```
+
+> **Note** : Cette configuration permet à tous les pods du cluster de résoudre les domaines externes via 8.8.8.8 (Google DNS) et 1.1.1.1 (Cloudflare DNS).
+
+#### NetworkPolicy pour le DNS
+
+Si même après la configuration du DNS forward, les résolutions échouent, il peut être nécessaire d'autoriser explicitement le trafic egress depuis CoreDNS :
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-coredns-egress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      k8s-app: kube-dns
+  policyTypes:
+    - Egress
+  egress:
+    - {}
+EOF
+```
+
+Cette politique autorise tout le trafic egress depuis les pods CoreDNS. En production, il est recommandé de restreindre cela aux ports et destinations nécessaires (UDP/TCP port 53 vers les DNS externes).
