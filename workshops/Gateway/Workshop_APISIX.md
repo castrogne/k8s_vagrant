@@ -196,9 +196,150 @@ EOF
 - `hostnames` doit correspondre à une entrée DNS ou être ajouté dans `/etc/hosts`
 - Pour une route par path sans hostname, retirer la section `hostnames`
 
-### 11. Tester l'accès
+### 11. Installer cert-manager et créer le ClusterIssuer
 
-(WIP - à définir)
+cert-manager gère les certificats TLS via Let's Encrypt.
+
+**Prérequis** : Modifier `<EMAIL>` avec une adresse email valide pour Let's Encrypt.
+
+**Note** : SSL est désactivé par défaut dans le chart APISIX. Voir [values.yaml APISIX](https://github.com/apache/apisix-helm-chart/blob/master/charts/apisix/values.yaml#L229) (`apisix.ssl.enabled`).
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm upgrade --install cert-manager jetstack/cert-manager \
+  --namespace kube-gateway \
+  --version v1.13.1 \
+  --set "extraArgs={--feature-gates=ExperimentalGatewayAPISupport=true}" \
+  --set crds.enabled=true
+```
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.letsencrypt.org/directory
+    email: <EMAIL>
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+      - http01:
+          ingress:
+            class: apisix
+EOF
+```
+
+> **Note** : Le challenge HTTP-01 nécessite que le port 80 soit accessible publiquement pour la validation du certificat.
+
+> **Important** : cert-manager nécessite l'activation du feature gate `ExperimentalGatewayAPISupport=true` pour supporter Gateway API.
+> Voir [cert-manager Gateway API documentation](https://cert-manager.io/docs/usage/gateway/)
+
+#### Gateway gw-https avec listener HTTPS
+
+**Lien doc** : [Gateway API - HTTP to HTTPS redirect](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/#http-to-https-redirects)
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gw-https
+  namespace: kube-monitoring
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  gatewayClassName: apisix
+  infrastructure:
+    parametersRef:
+      group: apisix.apache.org
+      kind: GatewayProxy
+      name: apisix-ingress-controller-config
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway: "enabled"
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "grafana.local"
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway: "enabled"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          name: grafana-tls
+          kind: Secret
+          group: ""
+EOF
+```
+
+#### HTTPRoute redirect HTTP → HTTPS
+
+**Lien doc** : [Gateway API - HTTP to HTTPS redirect](https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/#http-to-https-redirects)
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hr-grafana-redirect
+  namespace: kube-monitoring
+spec:
+  parentRefs:
+    - name: gw-https
+      namespace: kube-monitoring
+      sectionName: http
+  hostnames:
+    - "grafana.local"
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+EOF
+```
+
+#### HTTPRoute traffic HTTPS vers Grafana
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hr-grafana
+  namespace: kube-monitoring
+spec:
+  parentRefs:
+    - name: gw-https
+      namespace: kube-monitoring
+      sectionName: https
+  hostnames:
+    - "grafana.local"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: prometheus-grafana
+          port: 80
+EOF
+```
 
 ---
 

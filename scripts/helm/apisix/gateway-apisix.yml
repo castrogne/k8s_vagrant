@@ -26,6 +26,8 @@ service:
     nodePort: 30443
 
 apisix:
+  ssl:
+    enabled: true
   admin:
     allow:
       ipList:

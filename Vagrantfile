@@ -43,8 +43,8 @@ Vagrant.configure("2") do |config|
       kubenodes.vm.network "private_network", 
         virtualbox__intnet: "k8s-internal",
         ip: "10.0.10.#{i+20}"
-      kubenodes.vm.network "forwarded_port", guest: 80, host: 30080, auto_correct: true
-      kubenodes.vm.network "forwarded_port", guest: 443, host: 30443, auto_correct: true
+      kubenodes.vm.network "forwarded_port", guest: 30080, host: 30080, auto_correct: true
+      kubenodes.vm.network "forwarded_port", guest: 30443, host: 30443, auto_correct: true
       kubenodes.vm.provision "file", source: "./.ssh/id_rsa.pub", destination: "/tmp/id_rsa.pub"
       kubenodes.vm.provision "file", source: "./.ssh/id_rsa", destination: "/tmp/id_rsa"
       kubenodes.vm.provision "file", source: "scripts/vagrant/start_k8s.sh", destination: "/tmp/start_k8s.sh"

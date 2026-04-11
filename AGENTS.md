@@ -2,6 +2,12 @@
 
 This file contains guidelines and commands for agentic coding agents working in this Kubernetes Vagrant project.
 
+## Agent Rules
+
+- **NEVER make any modification without explicit user validation**, even in build mode
+- **NEVER touch files in the `workspace/` directory**
+- **Start ALL responses with the unicorn emoji** 🦄
+
 ## Project Overview
 
 This is a Kubernetes cluster setup project using Vagrant and VirtualBox for local development. The project includes:
