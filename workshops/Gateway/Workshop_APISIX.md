@@ -411,7 +411,7 @@ EOF
 
 Rate limiting allows controlling the number of requests allowed to a service. This is useful for:
 - Protecting against abuse and DDoS attacks
-- Limiting costs (paid API per request)
+- Implementing API monetization (per-request quotas)
 - Ensuring quality of service (QoS)
 
 ### 12.2 Available Plugins
@@ -438,6 +438,7 @@ The `limit-req` plugin uses the **leaky bucket** algorithm. It limits the number
 | `rate` | integer | ✅ | - | Number of requests allowed per second |
 | `burst` | integer | ✅ | - | Number of additional requests allowed (delay) |
 | `key` | string | ❌ | `remote_addr` | Limitation key (`remote_addr`, `consumer_name`, etc.) |
+| `key_type` | string | ❌ | `var` | Type of key (`var`, `var_combination`) |
 | `rejected_code` | integer | ❌ | 503 | HTTP code returned on rejection |
 | `nodelay` | boolean | ❌ | false | If true, do not delay requests |
 | `policy` | string | ❌ | `local` | Storage (`local`, `redis`, `redis-cluster`) |
@@ -477,6 +478,7 @@ The `limit-count` plugin uses a **fixed window** algorithm. It limits the number
 | `count` | integer | ✅ | - | Number of requests allowed |
 | `time_window` | integer | ✅ | - | Interval in **seconds** |
 | `key` | string | ❌ | `remote_addr` | Limitation key |
+| `key_type` | string | ❌ | `var` | Type of key (`var`, `var_combination`, `constant`) |
 | `rejected_code` | integer | ❌ | 503 | HTTP code returned on rejection |
 | `policy` | string | ❌ | `local` | Storage (`local`, `redis`, `redis-cluster`) |
 | `show_limit_quota_header` | boolean | ❌ | true | Add X-RateLimit-* headers |
@@ -505,12 +507,60 @@ The `limit-count` plugin uses a **fixed window** algorithm. It limits the number
   }
 }
 ```
+
 #### Response Headers
 
 When a request exceeds the quota, APISIX returns informative headers:
 - `X-RateLimit-Limit`: Total quota
 - `X-RateLimit-Remaining`: Remaining quota
 - `X-RateLimit-Reset`: Seconds until reset
+
+#### Key Options
+
+The `key` attribute allows limiting requests by different identifiers:
+
+| Key | Description | Use Case |
+|-----|-------------|----------|
+| `remote_addr` | Client IP address | Default, IP-based limiting |
+| `server_addr` | Server IP address | Service-level limiting |
+| `http_x_real_ip` | X-Real-IP header | Behind proxy |
+| `http_x_forwarded_for` | X-Forwarded-For header | CDN/proxy chains |
+| `consumer_name` | Authenticated consumer | Per-user limiting |
+| `service_id` | Service ID | Per-service limiting |
+
+##### key_type Options
+
+| key_type | Description | Example |
+|----------|-------------|---------|
+| `var` | Single variable (default) | `key: consumer_name` |
+| `var_combination` | Multiple variables | `key: "$remote_addr $consumer_name"` |
+| `constant` | Fixed value | `key: "api-tier-free"` |
+
+##### Usage Examples
+
+**Per IP (default):**
+```yaml
+key: remote_addr
+key_type: var
+```
+
+**Per authenticated user (requires auth):**
+```yaml
+key: consumer_name
+key_type: var
+```
+
+**IP + User combined:**
+```yaml
+key: "$remote_addr $consumer_name"
+key_type: var_combination
+```
+
+**By custom header:**
+```yaml
+key: http_x_api_key
+key_type: var
+```
 
 ---
 
@@ -558,6 +608,8 @@ spec:
 EOF
 ```
 
+> **Important**: The PluginConfig must be in the **same namespace** as the HTTPRoute, OR a ReferenceGrant must authorize cross-namespace access. Without proper authorization, the plugin will silently not be applied.
+
 #### HTTPRoute Association
 
 ```bash
@@ -582,22 +634,45 @@ spec:
       backendRefs:
         - name: prometheus-grafana
           port: 80
-      filter:
-        type: ExtensionRef
-        extensionRef:
-          group: apisix.apache.org
-          kind: PluginConfig
-          name: limit-count-plugin
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: apisix.apache.org
+            kind: PluginConfig
+            name: limit-count-plugin
 EOF
 ```
 
-> **Note**: Association via `ExtensionRef` is not yet supported by all versions. As an alternative, use an annotation on the route:
+> **Note**: For production, ensure PluginConfig is in the same namespace as HTTPRoute, or use ReferenceGrant for cross-namespace access.
 
-```yaml
+#### Cross-Namespace Reference with ReferenceGrant
+
+If the PluginConfig is in a different namespace than the HTTPRoute, use a ReferenceGrant to authorize the access.
+
+**Example:**
+- PluginConfig: `kube-gateway` namespace
+- HTTPRoute: `kube-monitoring` namespace
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
 metadata:
-  annotations:
-    apisix.apache.org/plugin-configs: "limit-count-plugin"
+  name: allow-httproute-to-plugins
+  namespace: kube-gateway
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: kube-monitoring
+  to:
+    - group: apisix.apache.org
+      kind: PluginConfig
+      name: limit-count-plugin
+EOF
 ```
+
+> **Note**: The ReferenceGrant must be in the **target** namespace (where the PluginConfig is).
 
 ---
 
