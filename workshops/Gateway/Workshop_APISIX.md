@@ -789,6 +789,121 @@ The `policy` parameter defines where the counter is stored:
 
 ---
 
+### 12.10 Redirect Plugin
+
+The `redirect` plugin allows URL redirection with support for regex matching and external domains.
+
+#### Main Attributes
+
+| Attribute | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `uri` | string | ❌ | - | Target URI (supports variables like `$uri`) |
+| `regex_uri` | array | ❌ | - | Regex match array `[pattern, replacement]` |
+| `ret_code` | integer | ❌ | 302 | HTTP redirect code (301, 302, 307, 308) |
+| `encode_uri` | boolean | ❌ | false | Encode URI per RFC3986 |
+| `append_query_string` | boolean | ❌ | false | Append original query string |
+
+#### Same Domain Redirect
+
+Redirect to a different path on the same domain:
+
+```yaml
+plugins:
+  - name: redirect
+    config:
+      uri: "/new-path"
+      ret_code: 301
+```
+
+With regex (preserve capture groups):
+
+```yaml
+plugins:
+  - name: redirect
+    config:
+      regex_uri:
+        - "^/api/v1/users/(.*)"
+        - "/api/v2/users/$1"
+      ret_code: 301
+```
+
+#### Cross-Domain Redirect
+
+Redirect to an external domain:
+
+```yaml
+plugins:
+  - name: redirect
+    config:
+      uri: "https://new-domain.com/new-path"
+      ret_code: 301
+```
+
+With regex to external domain:
+
+```yaml
+plugins:
+  - name: redirect
+    config:
+      regex_uri:
+        - "^/old-service/(.*)"
+        - "https://api.new-domain.com/v2/$1"
+      ret_code: 301
+```
+
+#### PluginConfig Example
+
+```yaml
+apiVersion: apisix.apache.org/v1alpha1
+kind: PluginConfig
+metadata:
+  name: redirect-same-domain
+  namespace: kube-monitoring
+spec:
+  plugins:
+    - name: redirect
+      config:
+        regex_uri:
+          - "^/grafana-old/(.*)"
+          - "/grafana-new/$1"
+        ret_code: 301
+```
+
+#### HTTPRoute Association
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hr-grafana-redirect
+  namespace: kube-monitoring
+spec:
+  parentRefs:
+    - name: gw-monitoring-https
+      namespace: kube-gateway
+      sectionName: https
+  hostnames:
+    - "grafana.famille-paquin.fr"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /grafana-old/
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: apisix.apache.org
+            kind: PluginConfig
+            name: redirect-same-domain
+      backendRefs:
+        - name: prometheus-grafana
+          port: 80
+```
+
+> **Important**: The redirect filter must come **before** the backendRefs in the rule, or use a separate HTTPRoute with higher priority.
+
+---
+
 ### 12.9 Recommendations
 
 #### Choosing the Right Plugin
