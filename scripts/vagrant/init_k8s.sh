@@ -219,3 +219,7 @@ chown vagrant:vagrant /home/vagrant/start_k8s.sh
 cp /tmp/k8s-startup.service /etc/systemd/system/k8s-startup.service
 systemctl daemon-reload
 systemctl enable k8s-startup.service
+
+mkdir -p /opt/local-path-provisioner
+chown vagrant:vagrant /opt/local-path-provisioner 
+echo "✅ Local path provisioner path created"

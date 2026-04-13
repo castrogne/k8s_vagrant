@@ -13,9 +13,14 @@
 
 # NOTE: Modify <CREDENTIAL_ADMIN> and <CREDENTIAL_VIEWER> with your actual credentials before running helm upgrade
 
-etcd:  
+etcd:
   persistence:
     enabled: false
+
+#  persistence:
+#    enabled: true
+#    storageClass: local-path
+#    size: 10Gi
 
 service:
   http:
