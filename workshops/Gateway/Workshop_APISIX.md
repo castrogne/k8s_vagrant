@@ -335,7 +335,7 @@ spec:
     - name: https
       port: 443
       protocol: HTTPS
-      hostname: "grafana.famille-paquin.fr"
+      hostname: "wonderfull.hostname.com"
       allowedRoutes:
         namespaces:
           from: All
@@ -365,13 +365,13 @@ spec:
       namespace: kube-gateway
       sectionName: http
   hostnames:
-    - "grafana.famille-paquin.fr"
+    - "wonderfull.hostname.com"
   rules:
     - filters:
         - type: RequestRedirect
           requestRedirect:
             scheme: https
-            hostname: "grafana.famille-paquin.fr"
+            hostname: "wonderfull.hostname.com"
             statusCode: 301
 EOF
 ```
@@ -391,7 +391,7 @@ spec:
       namespace: kube-gateway
       sectionName: https
   hostnames:
-    - "grafana.famille-paquin.fr"
+    - "wonderfull.hostname.com"
   rules:
     - matches:
         - path:
@@ -405,7 +405,7 @@ EOF
 
 ---
 
-## Chapter 12: Rate Limiting with APISIX
+## 12: Rate Limiting with APISIX
 
 ### 12.1 Introduction
 
@@ -625,7 +625,7 @@ spec:
       namespace: kube-gateway
       sectionName: https
   hostnames:
-    - "grafana.famille-paquin.fr"
+    - "wonderfull.hostname.com"
   rules:
     - matches:
         - path:
@@ -883,7 +883,7 @@ spec:
       namespace: kube-gateway
       sectionName: https
   hostnames:
-    - "grafana.famille-paquin.fr"
+    - "wonderfull.hostname.com"
   rules:
     - matches:
         - path:
@@ -921,6 +921,457 @@ spec:
 - **Use Redis in production**: For multi-node consistency
 - **Configure rejected_code**: Return 429 (Too Many Requests) for better client integration
 - **Add headers**: `show_limit_quota_header: true` to inform clients
+
+
+## 13: WAF with Coraza
+
+## 13.1 Introduction
+
+Coraza is an open-source Web Application Firewall (WAF) engine that is:
+- **OWASP Core Rule Set (CRS) compatible** - Industry standard protection
+- **ModSecurity SecLang compatible** - Use existing ModSecurity rules
+- **Built into APISIX** - No external WAF deployment needed
+- **23x more performant than Traefik WASM** (per benchmarks)
+
+### Architecture
+
+```
+[Client] --> [APISIX Gateway] --> [Coraza WAF Plugin] --> [Upstream Service]
+                      |                        |
+                      |                   Inspects:
+                      |                   - SQL Injection
+                      |                   - XSS
+                      |                   - RCE
+                      +-------------- 403 Forbidden (blocked)
+```
+
+### Prerequisites
+
+- APISIX 3.6+ (current: 3.15.0 via helm chart 2.13.0)
+- APISIX Ingress Controller configured
+
+---
+
+## 13.2 Create ApisixPluginConfig
+
+The Coraza WAF is enabled via the `ApisixPluginConfig` CRD. Create this in the `kube-gateway` namespace:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: coraza-waf
+  namespace: kube-gateway
+spec:
+  plugins:
+    - name: wasm-coraza
+      enable: true
+      config:
+        conf:
+          directives_map:
+            default:
+              - SecRuleEngine On
+              - SecRequestBodyAccess On
+              - Include @crs-setup-demo-conf
+              - Include @owasp_crs/*.conf
+          default_directives: default
+EOF
+```
+
+### Configuration Explained
+
+| Directive | Description |
+|-----------|-------------|
+| `SecRuleEngine On` | Enable rule processing |
+| `SecRequestBodyAccess On` | Inspect request body |
+| `@crs-setup-demo-conf` | Basic CRS configuration |
+| `@owasp_crs/*.conf` | OWASP Core Rule Set rules |
+
+### Verify Installation
+
+```bash
+kubectl get apisixpluginconfig -n kube-gateway coraza-waf
+```
+
+---
+
+## 13.3 Associate HTTPRoute with WAF
+
+Add the Coraza WAF plugin to an existing HTTPRoute using the `ExtensionRef` filter:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hr-grafana-waf
+  namespace: kube-monitoring
+spec:
+  parentRefs:
+    - name: gw-monitoring-https
+      namespace: kube-gateway
+      sectionName: https
+  hostnames:
+    - "<YOUR_DOMAIN>"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: prometheus-grafana
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: apisix.apache.org
+            kind: ApisixPluginConfig
+            name: coraza-waf
+EOF
+```
+
+> **Note**: This creates a new HTTPRoute with WAF protection. For existing routes, update them to include the filter.
+
+
+## 13.4 Test WAF Protection
+
+### Test 1: SQL Injection
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=1' OR '1'='1"
+```
+
+**Expected Response:**
+```
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+X-APISIX-Block-By: Coraza-WAF
+
+{"error_msg":"blocked by Coraza WAF"}
+```
+
+### Test 2: XSS Attack
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=<script>alert(1)</script>"
+```
+
+**Expected:** HTTP/1.1 403 Forbidden
+
+### Test 3: Command Injection
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=/etc/passwd"
+curl -i "http://<YOUR_DOMAIN>?q=|ls"
+```
+
+### Test 4: Normal Request (should pass)
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=normal+query"
+```
+
+**Expected:** HTTP/1.1 200 OK
+
+---
+
+## 13.5 Custom Rules
+
+### Mode: Monitoring Only
+
+For testing, enable monitoring without blocking:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: coraza-waf-monitor
+  namespace: kube-gateway
+spec:
+  plugins:
+    - name: wasm-coraza
+      enable: true
+      config:
+        conf:
+          directives_map:
+            default:
+              - SecRuleEngine DetectionOnly
+              - SecRequestBodyAccess On
+              - Include @crs-setup-demo-conf
+              - Include @owasp_crs/*.conf
+          default_directives: default
+EOF
+```
+
+### Custom Blocking Rules
+
+Add specific rules for your application:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: coraza-waf-custom
+  namespace: kube-gateway
+spec:
+  plugins:
+    - name: wasm-coraza
+      enable: true
+      config:
+        conf:
+          directives_map:
+            default:
+              - SecRuleEngine On
+              - SecRequestBodyAccess On
+              - SecRule id:1001 "@rx /admin" "phase:1,deny,status:403"
+              - SecRule id:1002 "@rx \.\./" "phase:1,deny,status:403"
+              - Include @crs-setup-demo-conf
+              - Include @owasp_crs/*.conf
+          default_directives: default
+EOF
+```
+
+### Rule ID Reference
+
+| ID Range | Purpose |
+|----------|---------|
+| 900000-900999 | CRS experimental rules |
+| 901000-901999 | CRS scoring rules |
+| Custom | Start at 10000+ |
+
+---
+
+## 13.6 Troubleshooting
+
+### Check Plugin Logs
+
+```bash
+kubectl logs -n kube-gateway -l app.kubernetes.io/name=apisix | grep -i coraza
+```
+
+### Verify Plugin Loaded
+
+```bash
+curl -s http://localhost:9180/apisix/admin/plugins \
+  -H "X-API-KEY: <CREDENTIAL_ADMIN>" | jq '.data[] | select(. == "wasm-coraza")'
+```
+
+---
+
+## 14: ML-based DDoS Protection with open-appsec
+
+### 14.1 Introduction
+
+open-appsec is a **machine learning-based Web Application Firewall** that differs from Coraza:
+
+| Aspect | Coraza (Chapter 13) | open-appsec |
+|--------|---------------------|-------------|
+| **Detection** | Rule-based (OWASP CRS) | ML-based |
+| **Zero-day** | Limited | Yes (learns patterns) |
+| **Updates** | Manual rule updates | Automatic learning |
+| **Setup** | Built-in plugin | Sidecar container |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Kubernetes Pod                         │
+│  ┌──────────────┐        ┌──────────────────────────────┐ │
+│  │ APISIX       │        │ open-appsec-agent            │ │
+│  │ (Gateway)    │◄──────►│ (ML WAF - sidecar)          │ │
+│  │              │  HTTP  │                              │ │
+│  │ Port 9080    │◄──────►│ Inspects traffic             │ │
+│  └──────────────┘        │ Returns: block/allow         │ │
+│         ▲                └──────────────────────────────┘ │
+│         │                                                 │
+└─────────┼─────────────────────────────────────────────────┘
+          │
+    [Upstream Services]
+```
+
+**Key Features:**
+- Detects unknown attacks (zero-day)
+- Learns from traffic patterns
+- Blocks botnets, scrapers, DDoS
+- Free Community Edition available
+
+---
+
+### 14.2 Installation
+
+#### Prerequisites
+
+- Kubernetes 1.16+
+- Helm 3 installed
+- Existing APISIX will be **replaced** by this deployment
+
+#### Download Helm Chart
+
+```bash
+wget https://downloads.openappsec.io/packages/helm-charts/apisix/open-appsec-k8s-apisix-latest.tgz
+```
+
+#### Install
+
+```bash
+helm install open-appsec-k8s-apisix-latest.tgz \
+  --name-template=appsec-apisix \
+  --set appsec.mode=standalone \
+  --set rbac.create=true \
+  --set service.type=LoadBalancer \
+  --set appsec.persistence.enabled=false \
+  --set ingress-controller.enabled=true \
+  --set ingress-controller.config.kubernetes.ingressClass=appsec-apisix \
+  --set appsec.userEmail="<YOUR_EMAIL>" \
+  --set appsec.agentToken= \
+  --create-namespace \
+  -n appsec-apisix
+```
+
+> **Note**: Replace `<YOUR_EMAIL>` with your email address.
+
+#### Verify Installation
+
+```bash
+kubectl -n appsec-apisix get pods
+kubectl -n appsec-apisix get svc
+```
+
+Expected pods:
+- `appsec-apisix-etcd`
+- `appsec-apisix-apisix-gateway`
+- `appsec-apisix-apisix-ingress-controller`
+- `open-appsec-agent-*`
+
+---
+
+### 14.3 Configuration
+
+#### Default Mode: detect-learn
+
+By default, open-appsec runs in **detect-learn** mode:
+- Logs threats but doesn't block
+- Learns from traffic to identify normal vs malicious
+- Recommended for initial deployment
+
+#### Switch to Prevent Mode
+
+After learning period, switch to blocking mode:
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: openappsec.io/v1beta1
+kind: Policy
+metadata:
+  name: open-appsec-best-practice-policy
+  namespace: appsec-apisix
+spec:
+  default:
+    mode: prevent-learn
+EOF
+```
+
+#### Available Modes
+
+| Mode | Description |
+|------|-------------|
+| `detect` | Log only, no learning |
+| `detect-learn` | Log + ML learning (default) |
+| `prevent` | Block without learning |
+| `prevent-learn` | Block + ML learning |
+
+---
+
+### 14.4 Testing
+
+#### Test 1: SQL Injection
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=1' OR '1'='1"
+```
+
+**Expected (in prevent mode):** HTTP/1.1 403 Forbidden
+
+**Expected (in detect-learn mode):** HTTP/1.1 200 OK (logged)
+
+#### Test 2: XSS Attack
+
+```bash
+curl -i "http://<YOUR_DOMAIN>?q=<script>alert(1)</script>"
+```
+
+#### Test 3: Check Logs
+
+```bash
+kubectl logs -n appsec-apisix -l app=open-appsec-agent -f
+```
+
+---
+
+### 14.5 Comparison with Coraza
+
+| Feature | Coraza | open-appsec |
+|---------|--------|-------------|
+| **Detection Type** | Signature-based | Machine Learning |
+| **Zero-day Protection** | Limited | Yes |
+| **Setup Complexity** | Easy (built-in) | Medium (sidecar) |
+| **Learning Capability** | No | Yes |
+| **Bot/DDoS Mitigation** | Basic (rate limit) | Advanced |
+| **Maintenance** | Manual rules | Automatic |
+
+---
+
+### 14.6 When to Use Which?
+
+| Scenario | Recommended |
+|----------|-------------|
+| Basic WAF (SQLi, XSS) | Coraza (Chapter 13) |
+| Zero-day protection | open-appsec |
+| Bot detection | open-appsec |
+| DDoS volume protection | Rate limiting + IP blocking |
+| Production ML protection | open-appsec |
+| Simple setup | Coraza (Chapter 13) |
+
+---
+
+### 14.7 Troubleshooting
+
+#### Check open-appsec Status
+
+```bash
+kubectl get policy -n appsec-apisix
+kubectl get policyactivation -n appsec-apisix
+```
+
+#### View Events
+
+```bash
+kubectl describe policy -n appsec-apisix
+```
+
+#### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Requests not blocked | Check mode is `prevent*` |
+| No learning | Wait for traffic to accumulate |
+| Pods not ready | Check logs: `kubectl logs -n appsec-apisix <pod>` |
+
+---
+
+### 14.8 Summary
+
+| Aspect | Details |
+|--------|---------|
+| **WAF Engine** | open-appsec (ML-based) |
+| **Detection** | Machine Learning + patterns |
+| **Deployment** | Sidecar container with APISIX |
+| **Modes** | detect/detect-learn/prevent/prevent-learn |
+| **Zero-day** | ✅ Yes (learns and adapts) |
+| **Edition** | Community Edition (free) |
 
 ---
 
@@ -1136,7 +1587,7 @@ spec:
     - name: https
       port: 443
       protocol: HTTPS
-      hostname: grafana.famille-paquin.fr
+      hostname: wonderfull.hostname.com
       tls:
         mode: Terminate
         certificateRefs:
@@ -1148,7 +1599,7 @@ spec:
 
 ### Wildcard Certificate
 
-A wildcard certificate allows managing a single certificate for all subdomains of a parent domain (e.g., `*.famille-paquin.fr`).
+A wildcard certificate allows managing a single certificate for all subdomains of a parent domain (e.g., `*.hostname.com`).
 
 #### ⚠️ Important - Let's Encrypt Limitation
 
@@ -1171,7 +1622,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@famille-paquin.fr
+    email: admin@hostname.com
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -1184,12 +1635,12 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: wildcard-famille-paquin
+  name: wildcard-hostname
   namespace: kube-gateway
 spec:
-  secretName: wildcard-famille-paquin-tls
+  secretName: wildcard-hostname-tls
   dnsNames:
-    - "*.famille-paquin.fr"
+    - "*.hostname.com"
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod-dns01
@@ -1199,10 +1650,10 @@ spec:
 
 | Certificate dnsNames | Listener hostname | Works? |
 |----------------|--------------|------------|
-| `*.famille-paquin.fr` | `*.famille-paquin.fr` | ✅ |
-| `*.famille-paquin.fr` | `grafana.famille-paquin.fr` | ✅ |
-| `*.famille-paquin.fr` | `prometheus.famille-paquin.fr` | ✅ |
-| `*.famille-paquin.fr` | `other-domain.fr` | ❌ |
-| `*.famille-paquin.fr` | (empty/null) | ❌ |
+| `*.hostname.com` | `*.hostname.com` | ✅ |
+| `*.hostname.com` | `wonderfull.hostname.com` | ✅ |
+| `*.hostname.com` | `prometheus.hostname.com` | ✅ |
+| `*.hostname.com` | `other-domain.fr` | ❌ |
+| `*.hostname.com` | (empty/null) | ❌ |
 
 > **Note**: With Gateway API, each listener must have an explicit hostname. Wildcard matching works if the requested hostname is a subdomain of the wildcard.

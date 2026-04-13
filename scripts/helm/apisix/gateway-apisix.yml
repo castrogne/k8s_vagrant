@@ -3,6 +3,20 @@
 ## https://github.com/apache/apisix-helm-chart
 ## https://apisix.apache.org/docs/helm-chart/apisix/
 
+# WAF Activation (Coraza)
+# ======================
+# APISIX includes Coraza WAF built-in (no external installation needed)
+# Requires: APISIX 3.6+ (helm chart 2.13.0 includes APISIX 3.15.0)
+# Plugin: wasm-coraza (via ApisixPluginConfig CRD)
+# Documentation: Workshop Section 13
+
+# ML-based WAF (open-appsec)
+# ==========================
+# Alternative: open-appsec for ML-based protection
+# Download: https://downloads.openappsec.io/packages/helm-charts/apisix/
+# Documentation: Workshop Section 14
+# Note: This REPLACES standard APISIX deployment
+
 # Init
 ## helm repo add apisix https://apache.github.io/apisix-helm-chart
 ## helm repo update
