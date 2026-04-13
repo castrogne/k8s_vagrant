@@ -775,6 +775,24 @@ velero restore create restore-renamed \
     --namespace-mappings default:demo-restore
 ```
 
+### Backup avec ressources cluster et RBAC
+
+To include cert-manager RBAC in your Velero backup, add the --cluster-role-bindings flag:
+```bash
+velero backup create workspace \
+  --include-namespaces=kube-gateway,kube-monitoring,local-path-storage \
+  --include-cluster-resources=true \
+  --cluster-role-bindings=cert-manager:leaderelection,cert-manager-controller
+```
+
+Or use --labels to be more specific:
+```bash
+velero backup create workspace \
+  --include-namespaces=kube-gateway,kube-monitoring,local-path-storage \
+  --include-cluster-resources=true \
+  --labels="app.kubernetes.io/managed-by=Helm"
+```
+
 ---
 
 ## Références

@@ -949,10 +949,100 @@ Coraza is an open-source Web Application Firewall (WAF) engine that is:
 
 - APISIX 3.6+ (current: 3.15.0 via helm chart 2.13.0)
 - APISIX Ingress Controller configured
+- **Important**: coraza-proxy-wasm.wasm file must be present in APISIX container
+
+> **Note**: The WASM file is NOT included in the default APISIX image. You must install it manually (see below).
 
 ---
 
-## 13.2 Create ApisixPluginConfig
+## 13.2 Prerequisites - Installing coraza-proxy-wasm
+
+The Coraza WASM file is **not included** in the default APISIX Docker image. You must install it manually using one of these methods:
+
+### Option 1: Using ConfigMap (Recommended)
+
+**Step 1: Download coraza-proxy-wasm**
+
+```bash
+wget https://github.com/corazawaf/coraza-proxy-wasm/releases/download/0.6.0/coraza-proxy-wasm-0.6.0.zip
+unzip coraza-proxy-wasm-0.6.0.zip
+# Results in: coraza-proxy-wasm.wasm
+```
+
+**Step 2: Create ConfigMap**
+
+```bash
+kubectl -n kube-gateway create configmap coraza-wasm --from-file=./coraza-proxy-wasm.wasm
+```
+> **Note**: Configmap create can fail when too large. Choose whatever method to provide this file : init script, mount it from storage...Etc.
+
+**Step 3: Update Helm Values**
+
+Add to your `gateway-apisix.yml`:
+
+```yaml
+extraVolumes:
+  - name: coraza-wasm
+    configMap:
+      name: coraza-wasm
+extraVolumeMounts:
+  - name: coraza-wasm
+    mountPath: /usr/local/bin/coraza-proxy-wasm.wasm
+    subPath: coraza-proxy-wasm.wasm
+
+apisix:
+  wasm:
+    enabled: true
+    plugins:
+      - name: coraza-filter
+        priority: 7999
+        file: /usr/local/bin/coraza-proxy-wasm.wasm
+```
+
+**Step 4: Upgrade APISIX**
+
+```bash
+helm -n kube-gateway upgrade --install apisix apisix/apisix --version 2.13.0 -f gateway-apisix.yml
+```
+
+### Option 2: Custom Docker Image
+
+Build a custom APISIX image with wasm included:
+
+```dockerfile
+FROM apache/apisix:3.15.0-debian
+ENV VERSION=0.6.0
+RUN wget https://github.com/corazawaf/coraza-proxy-wasm/releases/download/${VERSION}/coraza-proxy-wasm-${VERSION}.zip && \
+    unzip coraza-proxy-wasm-${VERSION}.zip -d /usr/local/apisix/ && \
+    rm coraza-proxy-wasm-${VERSION}.zip
+```
+
+### Verify Installation
+
+```bash
+# Check wasm file exists in pod
+kubectl -n kube-gateway exec -it <apisix-pod> -- ls -la /usr/local/bin/coraza-proxy-wasm.wasm
+
+# Check wasm plugin is loaded
+curl -s http://localhost:9180/apisix/admin/plugins \
+  -H "X-API-KEY: <CREDENTIAL_ADMIN>" | jq 'keys' | grep -i coraza
+```
+
+### How It Works
+
+| Component | Purpose |
+|-----------|---------|
+| `apisix.wasm.enabled: true` | Tells APISIX to look for wasm plugins |
+| `apisix.wasm.plugins[]` | Tells APISIX **where** to find the wasm file |
+| `extraVolumes` + `extraVolumeMounts` | Actually **puts the wasm file** into the container |
+
+Both are required - without the mounted file, APISIX cannot run the plugin.
+
+> **Alternative**: If manual wasm installation is too complex, see Section 14 for **open-appsec** - it includes its own wasm file and works out of the box.
+
+---
+
+## 13.3 Create ApisixPluginConfig
 
 The Coraza WAF is enabled via the `ApisixPluginConfig` CRD. Create this in the `kube-gateway` namespace:
 
@@ -996,7 +1086,7 @@ kubectl get apisixpluginconfig -n kube-gateway coraza-waf
 
 ---
 
-## 13.3 Associate HTTPRoute with WAF
+## 13.4 Associate HTTPRoute with WAF
 
 Add the Coraza WAF plugin to an existing HTTPRoute using the `ExtensionRef` filter:
 
@@ -1034,12 +1124,13 @@ EOF
 > **Note**: This creates a new HTTPRoute with WAF protection. For existing routes, update them to include the filter.
 
 
-## 13.4 Test WAF Protection
+## 13.5 Test WAF Protection
 
 ### Test 1: SQL Injection
 
 ```bash
-curl -i "http://<YOUR_DOMAIN>?q=1' OR '1'='1"
+# URL encoded (recommended)
+curl -ki "http://<YOUR_DOMAIN>?q=1%27%20OR%20%271%27=%271"
 ```
 
 **Expected Response:**
@@ -1054,7 +1145,8 @@ X-APISIX-Block-By: Coraza-WAF
 ### Test 2: XSS Attack
 
 ```bash
-curl -i "http://<YOUR_DOMAIN>?q=<script>alert(1)</script>"
+# URL encoded
+curl -ki "http://<YOUR_DOMAIN>?q=%3Cscript%3Ealert(1)%3C/script%3E"
 ```
 
 **Expected:** HTTP/1.1 403 Forbidden
@@ -1076,7 +1168,7 @@ curl -i "http://<YOUR_DOMAIN>?q=normal+query"
 
 ---
 
-## 13.5 Custom Rules
+## 13.6 Custom Rules
 
 ### Mode: Monitoring Only
 
@@ -1144,7 +1236,7 @@ EOF
 
 ---
 
-## 13.6 Troubleshooting
+## 13.7 Troubleshooting
 
 ### Check Plugin Logs
 
@@ -1158,6 +1250,29 @@ kubectl logs -n kube-gateway -l app.kubernetes.io/name=apisix | grep -i coraza
 curl -s http://localhost:9180/apisix/admin/plugins \
   -H "X-API-KEY: <CREDENTIAL_ADMIN>" | jq '.data[] | select(. == "wasm-coraza")'
 ```
+
+### Check WASM File Exists
+
+```bash
+# Check if wasm file is mounted in pod
+kubectl -n kube-gateway exec -it <apisix-pod> -- ls -la /usr/local/bin/coraza-proxy-wasm.wasm
+
+# If file not found, recheck:
+# 1. ConfigMap was created
+# 2. extraVolumes/extraVolumeMounts are in helm values
+# 3. Helm upgrade was run after changes
+```
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Plugin shows but no blocking | Check wasm file exists in pod |
+| 403 returned but no WAF headers | Verify ApisixPluginConfig is applied |
+| Config not applied | Ensure Section 13.2 prerequisites completed |
+| Rules not matching | Check `SecRuleEngine On` is set |
+
+> **Tip**: If manual wasm installation is complex, see Section 14 for **open-appsec** - it includes wasm automatically and works out of the box.
 
 ---
 
@@ -1177,11 +1292,11 @@ open-appsec is a **machine learning-based Web Application Firewall** that differ
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes Pod                         │
+┌───────────────────────────────────────────────────────────┐
+│                     Kubernetes Pod                        │
 │  ┌──────────────┐        ┌──────────────────────────────┐ │
 │  │ APISIX       │        │ open-appsec-agent            │ │
-│  │ (Gateway)    │◄──────►│ (ML WAF - sidecar)          │ │
+│  │ (Gateway)    │◄──────►│ (ML WAF - sidecar)           │ │
 │  │              │  HTTP  │                              │ │
 │  │ Port 9080    │◄──────►│ Inspects traffic             │ │
 │  └──────────────┘        │ Returns: block/allow         │ │
