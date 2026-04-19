@@ -1,0 +1,83 @@
+---
+# Docs
+## https://github.com/crowdsecurity/helm-charts
+## https://doc.crowdsec.net/docs/next/appsec/quickstart/traefik
+
+# Behavior-Based WAF
+# ===============
+# CrowdSec provides:
+# - Behavior-based detection (scenarios)
+# - Bot protection with adaptive attackers
+# - Community threat intelligence
+# - Virtual patching (OWASP CRS)
+# Documentation: Workshop Section 8
+
+# Init
+## helm repo add crowdsec https://crowdsecurity.github.io/helm-charts
+## helm repo update
+## kubectl create ns crowdsec
+
+# Deploy or Upgrade
+## helm -n crowdsec upgrade --install crowdsec crowdsec/crowdsec --version 0.23.0 -f helm/traefik/crowdsec.yml
+
+# NOTE: 
+# - REGISTRATION_TOKEN: Optional - only for crowdsec.net online dashboard. Get from https://www.crowdsec.net/ (free account)
+#   If not using the online dashboard, you can remove this line or leave as-is
+# - BOUNCER_KEY: Generate AFTER installation via: kubectl -n crowdsec exec -it crowdsec-lapi-0 -- cscli bouncer add traefik
+#   Then update the value below with the generated key
+
+# Container runtime
+container_runtime: containerd
+
+# Local API configuration
+# NOTE: BOUNCER_KEY can be set here for auto-registration, OR generated after install (recommended)
+lapi:
+  replicas: 1
+  persistence:
+    enabled: false
+  # Option 1: Set key here (for auto-registration) - generate first via:
+  #   kubectl -n crowdsec exec -it crowdsec-lapi-0 -- cscli bouncer add traefik
+  # env:
+  #   - name: BOUNCER_KEY_TRAEFIK
+  #     value: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Agent configuration
+agent:
+  enabled: true
+  acquisition:
+    - namespace: kube-gateway
+      podName: traefik-*
+      program: traefik
+  env:
+    - name: COLLECTIONS
+      value: "crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/http-dos"
+
+# AppSec (WAF) configuration
+appsec:
+  enabled: true
+  acquisitions:
+    - source: appsec
+      listen_addr: "0.0.0.0:7422"
+      path: /
+  env:
+    - name: COLLECTIONS
+      value: "crowdsecurity/appsec-virtual-patching crowdsecurity/appsec-crs crowdsecurity/appsec-generic-rules"
+
+# Local API server configuration
+config:
+  config.yaml.local: |
+    api:
+      server:
+        auto_registration:
+          enabled: true
+          # token: Optional - only for crowdsec.net online dashboard. Ignore if using standalone.
+          allowed_ranges:
+            - "127.0.0.1/32"
+            - "192.168.0.0/16"
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+    common:
+      log_level: info
+    prometheus:
+      enabled: true
+      level: full

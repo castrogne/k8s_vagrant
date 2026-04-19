@@ -1,0 +1,79 @@
+---
+# Docs
+## https://github.com/openappsec/openappsec
+## https://docs.openappsec.io/getting-started/start-with-kubernetes/install-using-helm
+
+# Download
+## wget https://downloads.openappsec.io/packages/helm-charts/apisix/open-appsec-k8s-apisix-latest.tgz
+
+# Deploy or Upgrade
+## helm install open-appsec-k8s-apisix-latest.tgz \
+##   --name-template=apisix \
+##   -n kube-gateway \
+##   --create-namespace \
+##   -f scripts/helm/openappsec/values.yml
+
+# NOTE: Modify <CREDENTIAL_ADMIN>, <CREDENTIAL_VIEWER> and <YOUR_EMAIL> before running
+
+# =============================================================================
+# APISIX Gateway Configuration
+# =============================================================================
+
+# Service Configuration
+service:
+  type: NodePort
+  http:
+    servicePort: 80
+    nodePort: 30080
+  tls:
+    servicePort: 443
+    nodePort: 30443
+
+# APISIX Configuration
+apisix:
+  ssl:
+    enabled: true
+  admin:
+    allow:
+      ipList:
+        - 127.0.0.1/24
+        - 192.168.0.0/16
+    credentials:
+      admin: <CREDENTIAL_ADMIN>
+      viewer: <CREDENTIAL_VIEWER>
+
+# RBAC for ingress controller
+rbac:
+  create: true
+
+# =============================================================================
+# APISIX Ingress Controller Configuration
+# =============================================================================
+ingress-controller:
+  enabled: true
+  config:
+    kubernetes:
+      ingressClass: appsec-apisix
+  gatewayProxy:
+    createDefault: false
+    provider:
+      controlPlane:
+        auth:
+          adminKey:
+            value: <CREDENTIAL_ADMIN>
+  apisix:
+    adminService:
+      namespace: kube-gateway
+      name: apisix-admin
+      port: 9180
+
+# =============================================================================
+# open-appsec Configuration
+# =============================================================================
+appsec:
+  mode: standalone
+  persistence:
+    enabled: false
+  userEmail: <YOUR_EMAIL>
+  agentToken: ""
+  name: open-appsec

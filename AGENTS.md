@@ -8,6 +8,7 @@ This file contains guidelines and commands for agentic coding agents working in 
 - **NEVER touch files in the `workspace/` directory**
 - **Start ALL responses with the unicorn emoji** 🦄
 - **NEVER launch any command without user consultation**, even for analysis, in build or plan mode
+- **ALLWAYS verify assumptions with official website or git repository of the targetted project.**
 
 ## Project Overview
 

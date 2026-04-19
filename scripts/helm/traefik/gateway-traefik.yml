@@ -1,0 +1,71 @@
+---
+# Docs
+## https://github.com/traefik/traefik-helm-chart
+## https://doc.traefik.io/traefik/reference/install-configuration/providers/kubernetes/kubernetes-gateway/
+
+# CrowdSec WAF Integration
+# ====================
+# CrowdSec provides behavior-based WAF protection
+# Requires: CrowdSec installed separately (see crowdsec.yml)
+# Plugin: crowdsec-bouncer-traefik-plugin (via Traefik Middleware)
+# Documentation: Workshop Section 12
+
+# Init
+## helm repo add traefik https://traefik.github.io/charts
+## helm repo update
+## kubectl create ns kube-gateway
+
+# Deploy or Upgrade
+## helm -n kube-gateway upgrade --install traefik traefik/traefik --version 39.0.5 -f helm/traefik/gateway-traefik.yml
+
+# NOTE: Bouncer key is configured in Traefik Middleware (Workshop Section 12), not in this file
+
+# Enable Gateway API (standard Kubernetes API)
+providers:
+  kubernetesCRD:
+    allowCrossNamespace: true
+  kubernetesGateway:
+    enabled: true
+    nativeLBByDefault: true
+    namespaces:
+      - kube-gateway
+      - kube-monitoring
+
+# Gateway configuration
+gateway:
+  enabled: true
+  defaultScope: All
+  listeners:
+    web:
+      port: 8000
+      protocol: HTTP
+
+# Traefik Dashboard
+api:
+  dashboard: true
+  insecure: true
+
+# Experimental plugins (for CrowdSec bouncer)
+experimental:
+  plugins:
+    crowdsec-bouncer-traefik-plugin:
+      moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
+      version: "v1.4.5"
+
+# Ports configuration (service-level)
+ports:
+  web:
+    exposedPort: 80
+    nodePort: 30080
+  websecure:
+    exposedPort: 443
+    nodePort: 30443
+
+# Service type
+service:
+  type: NodePort
+
+# Log level
+logs:
+  general:
+    level: INFO
